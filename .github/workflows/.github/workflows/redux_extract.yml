@@ -1,0 +1,170 @@
+name: Redux-Redux Extract
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  extract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Download Super Redux-Redux from Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+
+          mkdir -p "$GITHUB_WORKSPACE/ReduxInput"
+
+          TAG="$(gh release view \
+            --json tagName \
+            --jq '.tagName')"
+
+          echo "Latest release: $TAG"
+
+          gh release download "$TAG" \
+            --pattern "*.zip" \
+            --dir "$GITHUB_WORKSPACE/ReduxInput"
+
+          echo "Downloaded:"
+          ls -lh "$GITHUB_WORKSPACE/ReduxInput"
+
+      - name: Extract game
+        shell: bash
+        run: |
+          set -e
+
+          ZIP="$(find "$GITHUB_WORKSPACE/ReduxInput" \
+            -type f \
+            -iname "*.zip" \
+            | head -n 1)"
+
+          if [ -z "$ZIP" ]; then
+            echo "ERROR: ZIP not found"
+            exit 1
+          fi
+
+          mkdir -p "$GITHUB_WORKSPACE/ReduxGame"
+
+          unzip -q "$ZIP" \
+            -d "$GITHUB_WORKSPACE/ReduxGame"
+
+          DATAWIN="$(find "$GITHUB_WORKSPACE/ReduxGame" \
+            -type f \
+            -iname "data.win" \
+            | head -n 1)"
+
+          if [ -z "$DATAWIN" ]; then
+            echo "ERROR: data.win not found"
+            exit 1
+          fi
+
+          echo "DATAWIN=$DATAWIN" >> "$GITHUB_ENV"
+
+          echo "Found:"
+          echo "$DATAWIN"
+
+      - name: Download UndertaleModTool
+        shell: bash
+        run: |
+          set -e
+
+          git clone \
+            --depth 1 \
+            --recurse-submodules \
+            https://github.com/UnderminersTeam/UndertaleModTool.git \
+            "$GITHUB_WORKSPACE/UndertaleModTool"
+
+      - name: Build UndertaleModCli
+        shell: bash
+        run: |
+          set -e
+
+          dotnet publish \
+            "$GITHUB_WORKSPACE/UndertaleModTool/UndertaleModCli/UndertaleModCli.csproj" \
+            -c Release \
+            -o "$GITHUB_WORKSPACE/UMTCLI"
+
+          echo "CLI built successfully."
+
+      - name: Create GameMaker report
+        shell: bash
+        run: |
+          set -e
+
+          mkdir -p "$GITHUB_WORKSPACE/ReduxExtract"
+
+          dotnet \
+            "$GITHUB_WORKSPACE/UMTCLI/UndertaleModCli.dll" \
+            info \
+            "$DATAWIN" \
+            --verbose \
+            | tee "$GITHUB_WORKSPACE/ReduxExtract/GAME_INFO.txt"
+
+      - name: Decompile all GML
+        shell: bash
+        run: |
+          set -e
+
+          dotnet \
+            "$GITHUB_WORKSPACE/UMTCLI/UndertaleModCli.dll" \
+            dump \
+            "$DATAWIN" \
+            -o "$GITHUB_WORKSPACE/ReduxExtract" \
+            -c UMT_DUMP_ALL \
+            -s \
+            --verbose
+
+      - name: Make original file list
+        shell: bash
+        run: |
+          set -e
+
+          GAME_ROOT="$(dirname "$DATAWIN")"
+
+          find "$GAME_ROOT" \
+            -type f \
+            | sort \
+            > "$GITHUB_WORKSPACE/ReduxExtract/ORIGINAL_FILES.txt"
+
+          {
+            echo "SUPER REDUX-REDUX iOS PORT"
+            echo "=========================="
+            echo
+            echo "data.win:"
+            echo "$DATAWIN"
+            echo
+            echo "Decompiled GML files:"
+            find "$GITHUB_WORKSPACE/ReduxExtract" \
+              -type f \
+              \( -iname "*.gml" -o -iname "*.csx" \) \
+              | wc -l
+            echo
+            echo "Total extraction files:"
+            find "$GITHUB_WORKSPACE/ReduxExtract" \
+              -type f \
+              | wc -l
+          } > "$GITHUB_WORKSPACE/ReduxExtract/REPORT.txt"
+
+          cat "$GITHUB_WORKSPACE/ReduxExtract/REPORT.txt"
+
+      - name: Upload Redux extraction
+        uses: actions/upload-artifact@v4
+        with:
+          name: redux-redux-code
+          path: ReduxExtract/
+          if-no-files-found: error
+          retention-days: 7
