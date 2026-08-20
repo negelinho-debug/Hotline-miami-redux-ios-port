@@ -1,0 +1,153 @@
+name: Redux-Redux Runner Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Redux-Redux
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+
+          mkdir -p "$GITHUB_WORKSPACE/input"
+
+          TAG="$(gh release view \
+            --json tagName \
+            --jq '.tagName')"
+
+          gh release download "$TAG" \
+            --pattern "*.zip" \
+            --dir "$GITHUB_WORKSPACE/input"
+
+          ZIP="$(find "$GITHUB_WORKSPACE/input" \
+            -type f \
+            -iname "*.zip" \
+            | head -n 1)"
+
+          mkdir -p "$GITHUB_WORKSPACE/game"
+
+          unzip -q "$ZIP" \
+            -d "$GITHUB_WORKSPACE/game"
+
+          DATAWIN="$(find "$GITHUB_WORKSPACE/game" \
+            -type f \
+            -iname "data.win" \
+            | head -n 1)"
+
+          if [ -z "$DATAWIN" ]; then
+            echo "ERROR: data.win not found"
+            exit 1
+          fi
+
+          echo "DATAWIN=$DATAWIN" >> "$GITHUB_ENV"
+
+          echo "Found:"
+          echo "$DATAWIN"
+
+      - name: Download Butterscotch
+        shell: bash
+        run: |
+          set -e
+
+          git clone \
+            --depth 1 \
+            https://github.com/ButterscotchRunner/Butterscotch.git \
+            "$GITHUB_WORKSPACE/Butterscotch"
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -e
+
+          sudo apt-get update \
+            -o Acquire::Retries=3
+
+          sudo apt-get install -y \
+            cmake \
+            pkg-config \
+            libglfw3-dev \
+            libbz2-dev
+
+      - name: Build Butterscotch
+        shell: bash
+        run: |
+          set -e
+
+          cmake \
+            -S "$GITHUB_WORKSPACE/Butterscotch" \
+            -B "$GITHUB_WORKSPACE/Butterscotch/build" \
+            -DPLATFORM=desktop \
+            -DDESKTOP_BACKEND=glfw3 \
+            -DAUDIO_BACKEND=none \
+            -DENABLE_WAD14=OFF \
+            -DENABLE_WAD16=ON \
+            -DENABLE_WAD17=OFF \
+            -DENABLE_ASAN=OFF \
+            -DCMAKE_BUILD_TYPE=Release
+
+          cmake \
+            --build "$GITHUB_WORKSPACE/Butterscotch/build" \
+            --parallel 4
+
+      - name: Test data.win loading
+        shell: bash
+        run: |
+          set +e
+
+          mkdir -p "$GITHUB_WORKSPACE/results"
+
+          RUNNER="$GITHUB_WORKSPACE/Butterscotch/build/butterscotch"
+
+          "$RUNNER" \
+            "$DATAWIN" \
+            --headless \
+            --print-rooms \
+            > "$GITHUB_WORKSPACE/results/ROOMS.txt" \
+            2>&1
+
+          echo $? \
+            > "$GITHUB_WORKSPACE/results/ROOMS_EXIT_CODE.txt"
+
+          "$RUNNER" \
+            "$DATAWIN" \
+            --headless \
+            --print-unknown-functions \
+            > "$GITHUB_WORKSPACE/results/UNKNOWN_FUNCTIONS.txt" \
+            2>&1
+
+          echo $? \
+            > "$GITHUB_WORKSPACE/results/UNKNOWN_EXIT_CODE.txt"
+
+          "$RUNNER" \
+            "$DATAWIN" \
+            --headless \
+            --print-objects \
+            > "$GITHUB_WORKSPACE/results/OBJECTS.txt" \
+            2>&1
+
+          echo $? \
+            > "$GITHUB_WORKSPACE/results/OBJECTS_EXIT_CODE.txt"
+
+          echo "=== UNKNOWN FUNCTIONS ==="
+          cat "$GITHUB_WORKSPACE/results/UNKNOWN_FUNCTIONS.txt"
+
+      - name: Upload compatibility results
+        uses: actions/upload-artifact@v4
+        with:
+          name: redux-butterscotch-test
+          path: results/
+          if-no-files-found: error
+          retention-days: 7
