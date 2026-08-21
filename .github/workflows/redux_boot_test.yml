@@ -1,0 +1,198 @@
+name: Redux-Redux Boot Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Redux-Redux
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+
+          mkdir -p "$GITHUB_WORKSPACE/input"
+
+          TAG="$(gh release view \
+            --json tagName \
+            --jq '.tagName')"
+
+          gh release download "$TAG" \
+            --pattern "*.zip" \
+            --dir "$GITHUB_WORKSPACE/input"
+
+          ZIP="$(find "$GITHUB_WORKSPACE/input" \
+            -type f \
+            -iname "*.zip" \
+            | head -n 1)"
+
+          mkdir -p "$GITHUB_WORKSPACE/game"
+
+          unzip -q "$ZIP" \
+            -d "$GITHUB_WORKSPACE/game"
+
+          DATAWIN="$(find "$GITHUB_WORKSPACE/game" \
+            -type f \
+            -iname "data.win" \
+            | head -n 1)"
+
+          GAME_DIR="$(dirname "$DATAWIN")"
+
+          echo "DATAWIN=$DATAWIN" >> "$GITHUB_ENV"
+          echo "GAME_DIR=$GAME_DIR" >> "$GITHUB_ENV"
+
+      - name: Download Butterscotch
+        shell: bash
+        run: |
+          set -e
+
+          git clone \
+            --depth 1 \
+            https://github.com/ButterscotchRunner/Butterscotch.git \
+            "$GITHUB_WORKSPACE/Butterscotch"
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -e
+
+          sudo apt-get update -o Acquire::Retries=3
+
+          sudo apt-get install -y \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libglfw3-dev \
+            xvfb \
+            libgl1-mesa-dri \
+            libgl1-mesa-dev
+
+      - name: Configure Butterscotch
+        shell: bash
+        run: |
+          set -e
+
+          cmake \
+            -S "$GITHUB_WORKSPACE/Butterscotch" \
+            -B "$GITHUB_WORKSPACE/Butterscotch/build" \
+            -G Ninja \
+            -DPLATFORM=cli \
+            -DBACKEND=glfw3 \
+            -DAUDIO_BACKEND=none \
+            -DENABLE_WAD14=OFF \
+            -DENABLE_WAD16=ON \
+            -DENABLE_WAD17=OFF \
+            -DENABLE_VM_STUB_LOGS=ON \
+            -DENABLE_ASAN=OFF \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build Butterscotch
+        shell: bash
+        run: |
+          set -e
+
+          cmake \
+            --build "$GITHUB_WORKSPACE/Butterscotch/build" \
+            --parallel 4
+
+          RUNNER="$(find "$GITHUB_WORKSPACE/Butterscotch/build" \
+            -type f \
+            -name "butterscotch" \
+            -perm -111 \
+            | head -n 1)"
+
+          if [ -z "$RUNNER" ]; then
+            echo "ERROR: runner not found"
+            exit 1
+          fi
+
+          echo "RUNNER=$RUNNER" >> "$GITHUB_ENV"
+
+      - name: Prepare game for portable test
+        shell: bash
+        run: |
+          set -e
+
+          # Skip Steam startup where possible
+          touch "$GAME_DIR/steamoff"
+
+          mkdir -p "$GITHUB_WORKSPACE/results"
+          mkdir -p "$GITHUB_WORKSPACE/save"
+
+          echo "Game folder:"
+          ls -lah "$GAME_DIR"
+
+      - name: Boot Redux-Redux
+        shell: bash
+        run: |
+          set +e
+
+          cd "$GAME_DIR"
+
+          timeout 30s xvfb-run \
+            -a \
+            -s "-screen 0 1280x720x24" \
+            "$RUNNER" \
+            "$DATAWIN" \
+            --save-folder "$GITHUB_WORKSPACE/save" \
+            --screenshot "$GITHUB_WORKSPACE/results/redux_boot.png" \
+            --screenshot-at-frame 180 \
+            > "$GITHUB_WORKSPACE/results/BOOT_LOG.txt" \
+            2>&1
+
+          EXIT_CODE=$?
+
+          echo "$EXIT_CODE" \
+            > "$GITHUB_WORKSPACE/results/BOOT_EXIT_CODE.txt"
+
+          echo "Boot exit code: $EXIT_CODE"
+
+          echo
+          echo "===== LAST LOG LINES ====="
+          tail -n 300 \
+            "$GITHUB_WORKSPACE/results/BOOT_LOG.txt" \
+            || true
+
+          exit 0
+
+      - name: Create report
+        shell: bash
+        run: |
+          {
+            echo "SUPER REDUX-REDUX BOOT TEST"
+            echo "==========================="
+            echo
+            echo "Exit code:"
+            cat "$GITHUB_WORKSPACE/results/BOOT_EXIT_CODE.txt"
+            echo
+            echo "Screenshot:"
+            if [ -f "$GITHUB_WORKSPACE/results/redux_boot.png" ]; then
+              echo "YES"
+            else
+              echo "NO"
+            fi
+            echo
+            echo "Log lines:"
+            wc -l < "$GITHUB_WORKSPACE/results/BOOT_LOG.txt"
+          } > "$GITHUB_WORKSPACE/results/REPORT.txt"
+
+          cat "$GITHUB_WORKSPACE/results/REPORT.txt"
+
+      - name: Upload boot results
+        uses: actions/upload-artifact@v4
+        with:
+          name: redux-boot-test
+          path: results/
+          if-no-files-found: error
+          retention-days: 7
