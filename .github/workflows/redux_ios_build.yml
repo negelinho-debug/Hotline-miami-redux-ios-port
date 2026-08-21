@@ -1,4 +1,4 @@
-name: Super Redux-Redux iOS IPA v3
+name: Super Redux-Redux iOS Final Candidate v4
 
 on:
   workflow_dispatch:
@@ -14,10 +14,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      # =========================================================
-      # 1. DOWNLOAD COMPLETE SUPER REDUX-REDUX
-      # =========================================================
 
       - name: Download Super Redux-Redux
         shell: bash
@@ -68,14 +64,10 @@ jobs:
           echo "DATAWIN=$DATAWIN" >> "$GITHUB_ENV"
           echo "GAME_DIR=$GAME_DIR" >> "$GITHUB_ENV"
 
-          echo "Game:"
+          echo "Game directory:"
           echo "$GAME_DIR"
 
           du -sh "$GAME_DIR"
-
-      # =========================================================
-      # 2. DOWNLOAD BUTTERSCOTCH IOS
-      # =========================================================
 
       - name: Download Butterscotch iOS
         shell: bash
@@ -90,11 +82,8 @@ jobs:
 
           cd "$GITHUB_WORKSPACE/Butterscotch"
 
+          echo "Butterscotch:"
           git rev-parse HEAD
-
-      # =========================================================
-      # 3. XCODE / ARM64
-      # =========================================================
 
       - name: Prepare iPhone compiler
         shell: bash
@@ -120,11 +109,7 @@ jobs:
           echo "IOS_CC=$RUNNER_TEMP/ios-clang" \
             >> "$GITHUB_ENV"
 
-      # =========================================================
-      # 4. APP INFO
-      # =========================================================
-
-      - name: Set Super Redux-Redux app info
+      - name: Set app info
         shell: bash
         run: |
           set -e
@@ -147,10 +132,6 @@ jobs:
             -c "Set :MinimumOSVersion 12.0" \
             "$PLIST"
 
-      # =========================================================
-      # 5. BUNDLE THE WHOLE GAME
-      # =========================================================
-
       - name: Bundle complete Super Redux-Redux
         shell: bash
         run: |
@@ -167,23 +148,13 @@ jobs:
 
           test -f "$BUNDLED/data.win"
 
-          echo "Bundled game:"
+          echo "Bundled:"
           du -sh "$BUNDLED"
 
           echo "Files:"
           find "$BUNDLED" -type f | wc -l
 
-      # =========================================================
-      # 6. PATCH MISSING GAMEMAKER FUNCTIONS
-      #
-      # Fix:
-      # - room_set_view
-      # - d3d_set_projection_ortho
-      # - display_mouse_get_x/y
-      # - window_mouse_get_x/y
-      # =========================================================
-
-      - name: Patch Redux rendering and mouse builtins
+      - name: Patch Redux rendering
         shell: bash
         run: |
           set -e
@@ -196,10 +167,6 @@ jobs:
           p = Path("Butterscotch/src/vm_builtins.c")
           s = p.read_text()
 
-          # -----------------------------------------------------
-          # D3D ORTHOGRAPHIC PROJECTION
-          # -----------------------------------------------------
-
           room_marker = "// ===[ ROOM FUNCTIONS ]==="
 
           if room_marker not in s:
@@ -207,12 +174,9 @@ jobs:
 
           extra = r'''
           /*
-           * Super Redux-Redux compatibility
-           *
-           * GameMaker Studio 1.x d3d_set_projection_ortho()
-           * is heavily used by Hotline Miami / Redux for
-           * HUD, player, effects and screen-space drawing.
+           * Super Redux-Redux rendering compatibility
            */
+
           static RValue builtin_d3d_set_projection_ortho(
               VMContext* ctx,
               RValue* args,
@@ -242,7 +206,8 @@ jobs:
               float angle =
                   (float)RValue_toReal(args[4]);
 
-              if (width <= 0.0f || height <= 0.0f)
+              if (width <= 0.0f ||
+                  height <= 0.0f)
                   return RValue_makeUndefined();
 
               Matrix4f view;
@@ -268,18 +233,7 @@ jobs:
               return RValue_makeUndefined();
           }
 
-          /*
-           * GM:S 1.x room_set_view(
-           * room, view, visible,
-           * xview, yview, wview, hview,
-           * xport, yport, wport, hport,
-           * hborder, vborder,
-           * hspeed, vspeed, object
-           * )
-           *
-           * Redux calls this from scrSetPort to configure
-           * its 900x576 output and special room cameras.
-           */
+
           static RValue builtin_room_set_view(
               VMContext* ctx,
               RValue* args,
@@ -362,10 +316,6 @@ jobs:
               if (v->enabled)
                   room->flags |= 1;
 
-              /*
-               * If the script is changing the room that is
-               * currently active, update runtime view/camera too.
-               */
               if (runner != nullptr &&
                   runner->currentRoomIndex == roomId) {
 
@@ -444,10 +394,6 @@ jobs:
               1
           )
 
-          # -----------------------------------------------------
-          # MOUSE COORDINATE BUILTINS
-          # -----------------------------------------------------
-
           display_marker = "// Display stubs"
 
           if display_marker not in s:
@@ -456,13 +402,6 @@ jobs:
               )
 
           mouse_code = r'''
-          /*
-           * Redux mouse compatibility.
-           * display_get_width/height in this runner emulate
-           * the original 640x480 desktop display, therefore
-           * expose the touch cursor in that same coordinate
-           * space.
-           */
           static RValue builtin_display_mouse_get_x(
               VMContext* ctx,
               MAYBE_UNUSED RValue* args,
@@ -478,6 +417,7 @@ jobs:
                   runner->mouse->normalizedX * 640.0
               );
           }
+
 
           static RValue builtin_display_mouse_get_y(
               VMContext* ctx,
@@ -495,6 +435,7 @@ jobs:
               );
           }
 
+
           static RValue builtin_window_mouse_get_x(
               VMContext* ctx,
               MAYBE_UNUSED RValue* args,
@@ -510,6 +451,7 @@ jobs:
                   runner->mouse->screenX
               );
           }
+
 
           static RValue builtin_window_mouse_get_y(
               VMContext* ctx,
@@ -527,15 +469,12 @@ jobs:
               );
           }
 
+
           static RValue builtin_window_mouse_set(
               MAYBE_UNUSED VMContext* ctx,
               MAYBE_UNUSED RValue* args,
               MAYBE_UNUSED int32_t argCount
           ) {
-              /*
-               * A real iPhone cursor cannot be warped like a
-               * desktop cursor. Keep the physical touch position.
-               */
               return RValue_makeUndefined();
           }
 
@@ -547,10 +486,6 @@ jobs:
               1
           )
 
-          # -----------------------------------------------------
-          # REGISTER FUNCTIONS
-          # -----------------------------------------------------
-
           matrix_registration = (
               'VM_registerBuiltin(ctx, '
               '"matrix_build_projection_ortho", '
@@ -559,7 +494,7 @@ jobs:
 
           if matrix_registration not in s:
               raise SystemExit(
-                  "ERROR: matrix registration not found"
+                  "ERROR: matrix registration missing"
               )
 
           s = s.replace(
@@ -579,7 +514,7 @@ jobs:
 
           if room_registration not in s:
               raise SystemExit(
-                  "ERROR: room registration not found"
+                  "ERROR: room registration missing"
               )
 
           s = s.replace(
@@ -599,7 +534,7 @@ jobs:
 
           if display_registration not in s:
               raise SystemExit(
-                  "ERROR: display registration not found"
+                  "ERROR: display registration missing"
               )
 
           s = s.replace(
@@ -625,26 +560,10 @@ jobs:
 
           p.write_text(s)
 
-          print(
-              "Redux rendering builtins patched."
-          )
+          print("Rendering patch complete.")
           PY
 
-          grep -n \
-            "d3d_set_projection_ortho" \
-            Butterscotch/src/vm_builtins.c \
-            | head
-
-          grep -n \
-            "room_set_view" \
-            Butterscotch/src/vm_builtins.c \
-            | head
-
-      # =========================================================
-      # 7. PATCH IOS TOUCH / MOUSE / BUTTONS
-      # =========================================================
-
-      - name: Patch complete Redux touch controls
+      - name: Patch Redux gameplay controls
         shell: bash
         run: |
           set -e
@@ -660,24 +579,15 @@ jobs:
 
           s = p.read_text()
 
-          # -----------------------------------------------------
-          # MOUSE EVENT QUEUE
-          # -----------------------------------------------------
-
           marker = '''/* ---------------------------------------------------------------------
            * Game Controller (GCController / GCExtendedGamepad) support.'''
 
           if marker not in s:
               raise SystemExit(
-                  "ERROR: controller marker not found"
+                  "ERROR: controller marker missing"
               )
 
           mouse_queue = r'''
-          /*
-           * Deferred touchscreen mouse state/events.
-           * UIKit runs on the UI thread while the GameMaker
-           * runner consumes mouse state on the game thread.
-           */
           #define BS_MOUSE_QUEUE_SIZE 32
 
           typedef struct {
@@ -699,6 +609,7 @@ jobs:
 
           static _Atomic double
               bsTouchMouseY = 240.0;
+
 
           static void bsEnqueueMouseEvent(
               int32_t button,
@@ -726,6 +637,7 @@ jobs:
                   next
               );
           }
+
 
           static void bsDrainMouseEvents(void) {
 
@@ -755,11 +667,14 @@ jobs:
                       g_runner->mouse) {
 
                       if (ev.isDown) {
+
                           RunnerMouse_onButtonDown(
                               g_runner->mouse,
                               ev.button
                           );
+
                       } else {
+
                           RunnerMouse_onButtonUp(
                               g_runner->mouse,
                               ev.button
@@ -777,10 +692,6 @@ jobs:
               1
           )
 
-          # -----------------------------------------------------
-          # REAL TOUCH CURSOR POSITION
-          # -----------------------------------------------------
-
           old_mouse = '''/* TODO: touchscreen mouse support */
           void platformGetMousePos(double *xPos, double *yPos) {
               *xPos = 0.0;
@@ -794,7 +705,7 @@ jobs:
 
           if old_mouse not in s:
               raise SystemExit(
-                  "ERROR: platformGetMousePos not found"
+                  "ERROR: platformGetMousePos missing"
               )
 
           s = s.replace(
@@ -802,10 +713,6 @@ jobs:
               new_mouse,
               1
           )
-
-          # -----------------------------------------------------
-          # DRAIN MOUSE EVENTS ON GAME THREAD
-          # -----------------------------------------------------
 
           old_events = '''bool platformHandleEvents(void) {
               bsPollGameControllers();
@@ -818,7 +725,7 @@ jobs:
 
           if old_events not in s:
               raise SystemExit(
-                  "ERROR: platformHandleEvents not found"
+                  "ERROR: event loop marker missing"
               )
 
           s = s.replace(
@@ -827,15 +734,11 @@ jobs:
               1
           )
 
-          # -----------------------------------------------------
-          # TOUCH -> MOUSE COORDINATE CONVERTER
-          # -----------------------------------------------------
-
           action_marker = '''static void actionButtonRects(CGRect bf, CGRect out[3]) {'''
 
           if action_marker not in s:
               raise SystemExit(
-                  "ERROR: actionButtonRects not found"
+                  "ERROR: action layout marker missing"
               )
 
           touch_helper = r'''
@@ -887,10 +790,6 @@ jobs:
               1
           )
 
-          # -----------------------------------------------------
-          # NEW ACTION BUTTON CLASS
-          # -----------------------------------------------------
-
           interface_marker = '''@interface BSQuitButton : BSButton
           @end'''
 
@@ -913,7 +812,7 @@ jobs:
 
           if interface_marker not in s:
               raise SystemExit(
-                  "ERROR: BSQuitButton interface not found"
+                  "ERROR: button interface marker missing"
               )
 
           s = s.replace(
@@ -922,10 +821,6 @@ jobs:
               interface_marker,
               1
           )
-
-          # -----------------------------------------------------
-          # OVERLAY FIELDS
-          # -----------------------------------------------------
 
           s = s.replace(
               'BSKeyButton      *_actionButtons[3];',
@@ -942,7 +837,7 @@ jobs:
 
           if overlay_field not in s:
               raise SystemExit(
-                  "ERROR: overlay field marker not found"
+                  "ERROR: overlay marker missing"
               )
 
           s = s.replace(
@@ -950,16 +845,6 @@ jobs:
               replacement_field,
               1
           )
-
-          # -----------------------------------------------------
-          # ACTION BUTTONS
-          #
-          # A = LEFT MOUSE + ENTER
-          # X = RIGHT MOUSE
-          # C = SPACE
-          #
-          # ENTER keeps menu selection working.
-          # -----------------------------------------------------
 
           old_buttons = '''        _actionButtons[0] = [[BSKeyButton alloc] initWithFrame:CGRectZero key:'Z' label:@"Z" font:18.0f hitExpansion:6.0f];
                   _actionButtons[1] = [[BSKeyButton alloc] initWithFrame:CGRectZero key:'X' label:@"X" font:18.0f hitExpansion:6.0f];
@@ -993,7 +878,7 @@ jobs:
 
           if old_buttons not in s:
               raise SystemExit(
-                  "ERROR: action button initialization not found"
+                  "ERROR: original buttons missing"
               )
 
           s = s.replace(
@@ -1001,10 +886,6 @@ jobs:
               new_buttons,
               1
           )
-
-          # -----------------------------------------------------
-          # WASD JOYSTICK
-          # -----------------------------------------------------
 
           old_dpad = (
               'static const int32_t keys[4] = '
@@ -1015,7 +896,7 @@ jobs:
 
           if count < 2:
               raise SystemExit(
-                  f"ERROR: expected 2 D-pad maps, found {count}"
+                  f"ERROR: expected two dpad maps; found {count}"
               )
 
           s = s.replace(
@@ -1024,10 +905,6 @@ jobs:
               "{ 'W', 'S', 'A', 'D' };"
           )
 
-          # -----------------------------------------------------
-          # AIM TOUCH START
-          # -----------------------------------------------------
-
           old_begin = '''        for (int i = 0; i < 3; i++) {
                       if ([_actionButtons[i] handleTouchBegan:touch point:p]) break;
                   }'''
@@ -1035,6 +912,7 @@ jobs:
           new_begin = '''        BOOL actionHandled = NO;
 
                   for (int i = 0; i < 3; i++) {
+
                       if ([_actionButtons[i]
                               handleTouchBegan:touch
                               point:p]) {
@@ -1067,7 +945,7 @@ jobs:
 
           if old_begin not in s:
               raise SystemExit(
-                  "ERROR: touchesBegan action loop not found"
+                  "ERROR: action touch start missing"
               )
 
           s = s.replace(
@@ -1075,10 +953,6 @@ jobs:
               new_begin,
               1
           )
-
-          # -----------------------------------------------------
-          # AIM TOUCH MOVE
-          # -----------------------------------------------------
 
           old_move = '''    for (UITouch *touch in touches) {
                   CGPoint p = [touch locationInView:self];
@@ -1117,7 +991,7 @@ jobs:
 
           if old_move not in s:
               raise SystemExit(
-                  "ERROR: touchesMoved block not found"
+                  "ERROR: touch move missing"
               )
 
           s = s.replace(
@@ -1125,10 +999,6 @@ jobs:
               new_move,
               1
           )
-
-          # -----------------------------------------------------
-          # AIM TOUCH END
-          # -----------------------------------------------------
 
           old_end = '''        for (int i = 0; i < 3; i++) {
                       if ([_actionButtons[i] handleTouchEnded:touch]) break;
@@ -1157,7 +1027,7 @@ jobs:
 
           if old_end not in s:
               raise SystemExit(
-                  "ERROR: touch end action loop not found"
+                  "ERROR: touch end missing"
               )
 
           s = s.replace(
@@ -1165,10 +1035,6 @@ jobs:
               new_end,
               1
           )
-
-          # -----------------------------------------------------
-          # RELEASE AIM TOUCH
-          # -----------------------------------------------------
 
           old_dealloc = '''    for (int i = 0; i < 3; i++) [_actionButtons[i] release];
               [super dealloc];'''
@@ -1182,7 +1048,7 @@ jobs:
 
           if old_dealloc not in s:
               raise SystemExit(
-                  "ERROR: overlay dealloc marker not found"
+                  "ERROR: dealloc missing"
               )
 
           s = s.replace(
@@ -1190,10 +1056,6 @@ jobs:
               new_dealloc,
               1
           )
-
-          # -----------------------------------------------------
-          # ACTION BUTTON IMPLEMENTATION
-          # -----------------------------------------------------
 
           implementation_marker = '''@implementation BSToggleKeyButton'''
 
@@ -1223,6 +1085,7 @@ jobs:
               return self;
           }
 
+
           - (void)onPress {
 
               [super onPress];
@@ -1240,6 +1103,7 @@ jobs:
                       true
                   );
           }
+
 
           - (void)onRelease {
 
@@ -1265,7 +1129,7 @@ jobs:
 
           if implementation_marker not in s:
               raise SystemExit(
-                  "ERROR: action implementation marker not found"
+                  "ERROR: action implementation marker missing"
               )
 
           s = s.replace(
@@ -1277,30 +1141,298 @@ jobs:
 
           p.write_text(s)
 
-          print(
-              "iOS Redux gameplay controls patched."
-          )
+          print("Main touch controls complete.")
           PY
 
-          echo "===== CONTROL PATCH CHECK ====="
+      - name: Add R LOOK LOCK and performance fixes
+        shell: bash
+        run: |
+          set -e
+
+          cd "$GITHUB_WORKSPACE"
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          p = Path("Butterscotch/src/ios/main.c")
+          s = p.read_text()
+
+          # ------------------------------------------------------
+          # FORCE NORMAL GAME RESOLUTION
+          # Prevent accidental high-resolution mode from reducing
+          # performance on an existing installation.
+          # ------------------------------------------------------
+
+          old_highres = '''static bool bsLoadHighResEnabled(void) {
+              return [[NSUserDefaults standardUserDefaults] boolForKey:BS_HIGH_RES_DEFAULTS_KEY];
+          }'''
+
+          new_highres = '''static bool bsLoadHighResEnabled(void) {
+              return false;
+          }'''
+
+          if old_highres in s:
+              s = s.replace(
+                  old_highres,
+                  new_highres,
+                  1
+              )
+
+          # ------------------------------------------------------
+          # REPURPOSE TOP-LEFT >> BUTTON INTO LOOK (SHIFT)
+          # ------------------------------------------------------
+
+          old_ff_type = (
+              'BSToggleKeyButton *_ffButton;'
+          )
+
+          new_ff_type = (
+              'BSKeyButton       *_ffButton;'
+          )
+
+          if old_ff_type not in s:
+              raise SystemExit(
+                  "ERROR: ff button declaration missing"
+              )
+
+          s = s.replace(
+              old_ff_type,
+              new_ff_type,
+              1
+          )
+
+          old_ff_init = '''        _ffButton = [[BSToggleKeyButton alloc] initWithFrame:CGRectZero key:VK_TAB label:@">>" font:16.0f hitExpansion:6.0f];'''
+
+          new_ff_init = '''        _ffButton = [[BSKeyButton alloc]
+                      initWithFrame:CGRectZero
+                      key:VK_SHIFT
+                      label:@"LOOK"
+                      font:9.0f
+                      hitExpansion:10.0f];'''
+
+          if old_ff_init not in s:
+              raise SystemExit(
+                  "ERROR: ff init missing"
+              )
+
+          s = s.replace(
+              old_ff_init,
+              new_ff_init,
+              1
+          )
+
+          # ------------------------------------------------------
+          # ADD R + LOCK BUTTON FIELDS
+          # ------------------------------------------------------
+
+          aim_field = '''    UITouch          *_aimTouch;'''
+
+          new_fields = '''    UITouch          *_aimTouch;
+              BSKeyButton      *_restartButton;
+              BSActionButton   *_lockButton;'''
+
+          if aim_field not in s:
+              raise SystemExit(
+                  "ERROR: aim field missing"
+              )
+
+          s = s.replace(
+              aim_field,
+              new_fields,
+              1
+          )
+
+          # ------------------------------------------------------
+          # INITIALIZE R + LOCK
+          # R = restart
+          # LOCK = global middle mouse press
+          # ------------------------------------------------------
+
+          aim_init = '''        _aimTouch = nil;'''
+
+          new_init = '''        _restartButton = [[BSKeyButton alloc]
+                      initWithFrame:CGRectZero
+                      key:'R'
+                      label:@"R"
+                      font:14.0f
+                      hitExpansion:10.0f];
+
+                  _lockButton = [[BSActionButton alloc]
+                      initWithFrame:CGRectZero
+                      mouseButton:GML_MB_MIDDLE
+                      key:-1
+                      label:@"LOCK"
+                      font:8.0f
+                      hitExpansion:10.0f];
+
+                  _aimTouch = nil;'''
+
+          if aim_init not in s:
+              raise SystemExit(
+                  "ERROR: aim init missing"
+              )
+
+          s = s.replace(
+              aim_init,
+              new_init,
+              1
+          )
+
+          # ------------------------------------------------------
+          # POSITION BUTTONS
+          # LOOK = original top-left button
+          # R and LOCK = beside quit button
+          # ------------------------------------------------------
+
+          layout_line = '''    _ffButton.frame = layout.ffFrame;'''
+
+          new_layout = '''    _ffButton.frame = layout.ffFrame;
+
+              CGFloat rightEdge =
+                  self.bounds.size.width -
+                  BS_QUIT_BUTTON_MARGIN -
+                  BS_QUIT_BUTTON_SIZE;
+
+              _restartButton.frame =
+                  CGRectMake(
+                      rightEdge - 42.0f,
+                      BS_QUIT_BUTTON_MARGIN,
+                      34.0f,
+                      34.0f
+                  );
+
+              _lockButton.frame =
+                  CGRectMake(
+                      rightEdge - 94.0f,
+                      BS_QUIT_BUTTON_MARGIN,
+                      46.0f,
+                      34.0f
+                  );'''
+
+          if layout_line not in s:
+              raise SystemExit(
+                  "ERROR: updateLayout marker missing"
+              )
+
+          s = s.replace(
+              layout_line,
+              new_layout,
+              1
+          )
+
+          # ------------------------------------------------------
+          # DRAW NEW BUTTONS
+          # ------------------------------------------------------
+
+          draw_line = '''    [_ffButton drawInContext:ctx];'''
+
+          new_draw = '''    [_ffButton drawInContext:ctx];
+              [_restartButton drawInContext:ctx];
+              [_lockButton drawInContext:ctx];'''
+
+          if draw_line not in s:
+              raise SystemExit(
+                  "ERROR: draw marker missing"
+              )
+
+          s = s.replace(
+              draw_line,
+              new_draw,
+              1
+          )
+
+          # ------------------------------------------------------
+          # TOUCH START
+          # ------------------------------------------------------
+
+          begin_marker = '''        if ([_ffButton handleTouchBegan:touch point:p]) continue;
+                  if ([_dpad handleTouchBegan:touch point:p]) continue;'''
+
+          begin_new = '''        if ([_ffButton handleTouchBegan:touch point:p]) continue;
+                  if ([_restartButton handleTouchBegan:touch point:p]) continue;
+                  if ([_lockButton handleTouchBegan:touch point:p]) continue;
+                  if ([_dpad handleTouchBegan:touch point:p]) continue;'''
+
+          if begin_marker not in s:
+              raise SystemExit(
+                  "ERROR: touch begin marker missing"
+              )
+
+          s = s.replace(
+              begin_marker,
+              begin_new,
+              1
+          )
+
+          # ------------------------------------------------------
+          # TOUCH END
+          # ------------------------------------------------------
+
+          end_marker = '''        if ([_ffButton handleTouchEnded:touch]) continue;'''
+
+          end_new = '''        if ([_ffButton handleTouchEnded:touch]) continue;
+                  if ([_restartButton handleTouchEnded:touch]) continue;
+                  if ([_lockButton handleTouchEnded:touch]) continue;'''
+
+          if end_marker not in s:
+              raise SystemExit(
+                  "ERROR: touch end marker missing"
+              )
+
+          s = s.replace(
+              end_marker,
+              end_new,
+              1
+          )
+
+          # ------------------------------------------------------
+          # DEALLOC
+          # ------------------------------------------------------
+
+          dealloc_marker = '''    [_ffButton release];
+              for (int i = 0; i < 3; i++) [_actionButtons[i] release];'''
+
+          dealloc_new = '''    [_ffButton release];
+              [_restartButton release];
+              [_lockButton release];
+
+              for (int i = 0; i < 3; i++)
+                  [_actionButtons[i] release];'''
+
+          if dealloc_marker not in s:
+              raise SystemExit(
+                  "ERROR: dealloc controls marker missing"
+              )
+
+          s = s.replace(
+              dealloc_marker,
+              dealloc_new,
+              1
+          )
+
+          p.write_text(s)
+
+          print("FINAL Redux controls:")
+          print("R = restart")
+          print("LOOK = Shift / look farther")
+          print("LOCK = middle mouse / target lock")
+          print("High resolution forced OFF")
+          PY
+
+          echo
+          echo "===== FINAL CONTROL CHECK ====="
 
           grep -n \
-            "BSActionButton" \
-            Butterscotch/src/ios/main.c \
-            | head
-
-          grep -n \
-            "bsTouchMouse" \
-            Butterscotch/src/ios/main.c \
-            | head
-
-          grep -n \
-            "{ 'W', 'S', 'A', 'D' }" \
+            'label:@"LOOK"' \
             Butterscotch/src/ios/main.c
 
-      # =========================================================
-      # 8. AUTOMATIC INSTALL OF BUNDLED SUPER R-R
-      # =========================================================
+          grep -n \
+            'label:@"LOCK"' \
+            Butterscotch/src/ios/main.c
+
+          grep -n \
+            "key:'R'" \
+            Butterscotch/src/ios/main.c
 
       - name: Add automatic game installer
         shell: bash
@@ -1323,11 +1455,6 @@ jobs:
           '''
 
           patch = r'''
-              /*
-               * Super Redux-Redux:
-               * copy full bundled game to writable Documents
-               * folder once.
-               */
               @autoreleasepool {
 
                   NSFileManager *fm =
@@ -1397,7 +1524,7 @@ jobs:
 
           if needle not in s:
               raise SystemExit(
-                  "ERROR: game list marker not found"
+                  "ERROR: game list marker missing"
               )
 
           s = s.replace(
@@ -1408,14 +1535,8 @@ jobs:
 
           p.write_text(s)
 
-          print(
-              "Automatic Redux installer patched."
-          )
+          print("Bundled game installer complete.")
           PY
-
-      # =========================================================
-      # 9. CLEAN
-      # =========================================================
 
       - name: Clean previous build
         shell: bash
@@ -1424,11 +1545,7 @@ jobs:
 
           make distclean || true
 
-      # =========================================================
-      # 10. BUILD IPHONE ARM64
-      # =========================================================
-
-      - name: Build Redux iOS v3
+      - name: Build final Redux iOS
         shell: bash
         run: |
           set -e
@@ -1447,24 +1564,23 @@ jobs:
             -j3 \
             OS=iOS \
             CC="$IOS_CC" \
+            CFLAGS="-O3 -DNDEBUG" \
             DISABLE_WAD14=1 \
             DISABLE_WAD17=1 \
             DISABLE_VM_GML_PROFILER=1 \
             DISABLE_VM_OPCODE_PROFILER=1 \
+            DISABLE_VM_STUB_LOGS=1 \
             DISABLE_VM_TRACING=1 \
             BUTTERSCOTCH_COMMIT_HASH="$HASH" \
             BUTTERSCOTCH_COMMIT_DATE="$DATE"
 
+          echo
           echo "===== BUILD FINISHED ====="
 
           find build \
             -maxdepth 2 \
             -type f \
             -print
-
-      # =========================================================
-      # 11. VERIFY IPA
-      # =========================================================
 
       - name: Verify IPA
         shell: bash
@@ -1481,22 +1597,22 @@ jobs:
           echo "Binary:"
           file "$BIN"
 
+          echo
           echo "Architecture:"
           lipo -info "$BIN" || true
 
+          echo
           echo "IPA:"
           ls -lh "$IPA"
 
+          echo
           echo "Bundled data.win:"
+
           unzip -l "$IPA" \
             | grep -i \
               "BundledGame/data.win"
 
-      # =========================================================
-      # 12. FINAL V3
-      # =========================================================
-
-      - name: Prepare final v3 IPA
+      - name: Prepare final candidate
         shell: bash
         run: |
           set -e
@@ -1505,76 +1621,81 @@ jobs:
 
           cp \
             "$GITHUB_WORKSPACE/Butterscotch/build/butterscotch.ipa" \
-            "$GITHUB_WORKSPACE/output/Super-Redux-Redux-iOS-v3.ipa"
+            "$GITHUB_WORKSPACE/output/Super-Redux-Redux-iOS-v4-Final-Candidate.ipa"
 
           cat > "$GITHUB_WORKSPACE/output/README.txt" <<'EOF'
-          SUPER REDUX-REDUX iOS v3
+          SUPER REDUX-REDUX iOS v4
           ========================
 
-          Fixes:
-          - room_set_view
-          - d3d_set_projection_ortho
-          - Redux camera / viewport
-          - HUD projection
-          - display mouse coordinates
-          - touchscreen aiming
-          - WASD movement
-          - left mouse attack / shooting
-          - right mouse pickup / throw
-          - Space interaction
-          - menu confirmation
-          - full Super Redux-Redux bundled
+          FINAL CANDIDATE
 
-          Controls:
+          CONTROLS
 
-          Left joystick:
-          W / A / S / D movement
+          LEFT JOYSTICK
+          W/A/S/D movement
 
-          Touch game screen:
-          move aim / crosshair
+          TOUCH GAME AREA
+          aim / crosshair
 
-          A:
+          A
           left mouse
-          attack / shoot
-          Enter for menus
+          punch / shoot
+          Enter in menus
 
-          X:
+          X
           right mouse
-          pickup / throw
+          pickup / throw weapon
 
-          C:
+          C
           Space
-          interaction / execution
+          execution / interaction
 
-          This is an unsigned/ad-hoc IPA.
-          Re-sign with your sideloading method.
+          R
+          restart after death
+
+          LOOK
+          hold to look farther
+          equivalent to Shift
+
+          LOCK
+          target lock / auto aim
+          equivalent to middle mouse
+
+          PERFORMANCE
+
+          - VM profiler disabled
+          - opcode profiler disabled
+          - stub logging disabled
+          - tracing disabled
+          - O3 optimized build
+          - high-resolution framebuffer forced off
+          - arm64 iPhone build
+
+          GAME
+
+          Full Super Redux-Redux is bundled inside IPA.
+
+          This IPA is unsigned/ad-hoc.
+          Re-sign it using your sideloading method.
           EOF
 
           ls -lh "$GITHUB_WORKSPACE/output"
 
-      # =========================================================
-      # 13. UPLOAD
-      # =========================================================
-
-      - name: Upload Super Redux-Redux iOS v3
+      - name: Upload final candidate IPA
         uses: actions/upload-artifact@v4
         with:
-          name: super-redux-redux-ios-v3
+          name: super-redux-redux-ios-v4-final
           path: |
-            output/Super-Redux-Redux-iOS-v3.ipa
+            output/Super-Redux-Redux-iOS-v4-Final-Candidate.ipa
             output/README.txt
           if-no-files-found: error
           retention-days: 7
 
-      # =========================================================
-      # 14. DEBUG IF BUILD FAILS
-      # =========================================================
-
-      - name: Upload v3 debug files
+      - name: Upload debug files
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: redux-ios-v3-failed
+          name: redux-ios-v4-failed
           path: |
             Butterscotch/src/ios/main.c
             Butterscotch/src/vm_builtins.c
