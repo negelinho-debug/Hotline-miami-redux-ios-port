@@ -1,4 +1,4 @@
-name: Super Redux-Redux iOS IPA
+name: Super Redux-Redux iOS IPA v2
 
 on:
   workflow_dispatch:
@@ -9,11 +9,15 @@ permissions:
 jobs:
   ios:
     runs-on: macos-14
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # =========================================================
+      # 1. DOWNLOAD FULL SUPER REDUX-REDUX FROM OUR GITHUB RELEASE
+      # =========================================================
 
       - name: Download Super Redux-Redux
         shell: bash
@@ -40,9 +44,12 @@ jobs:
             | head -n 1)"
 
           if [ -z "$ZIP" ]; then
-            echo "ERROR: Redux ZIP not found"
+            echo "ERROR: Super Redux-Redux ZIP not found"
             exit 1
           fi
+
+          echo "ZIP found:"
+          echo "$ZIP"
 
           mkdir -p "$GITHUB_WORKSPACE/game"
 
@@ -64,10 +71,25 @@ jobs:
           echo "DATAWIN=$DATAWIN" >> "$GITHUB_ENV"
           echo "GAME_DIR=$GAME_DIR" >> "$GITHUB_ENV"
 
-          echo "Game root:"
+          echo
+          echo "===== GAME DIRECTORY ====="
           echo "$GAME_DIR"
 
-          ls -lah "$GAME_DIR" | head -n 50
+          echo
+          echo "===== GAME SIZE ====="
+          du -sh "$GAME_DIR"
+
+          echo
+          echo "===== GAME FILES ====="
+          find "$GAME_DIR" \
+            -maxdepth 2 \
+            -type f \
+            | sort \
+            | head -n 150
+
+      # =========================================================
+      # 2. DOWNLOAD EXISTING BUTTERSCOTCH iOS PORT
+      # =========================================================
 
       - name: Download Butterscotch iOS port
         shell: bash
@@ -82,23 +104,33 @@ jobs:
 
           cd "$GITHUB_WORKSPACE/Butterscotch"
 
-          echo "iOS branch commit:"
+          echo
+          echo "Butterscotch commit:"
           git rev-parse HEAD
+
+      # =========================================================
+      # 3. CHECK XCODE / iPHONE SDK
+      # =========================================================
 
       - name: Show Xcode environment
         shell: bash
         run: |
           set -e
 
+          echo "===== XCODE ====="
           xcodebuild -version
 
           echo
-          echo "iPhoneOS SDK:"
+          echo "===== iPHONE SDK ====="
           xcrun --sdk iphoneos --show-sdk-path
 
           echo
-          echo "Clang:"
+          echo "===== CLANG ====="
           xcrun --sdk iphoneos --find clang
+
+      # =========================================================
+      # 4. CREATE ARM64 iPHONE COMPILER
+      # =========================================================
 
       - name: Create iOS compiler wrapper
         shell: bash
@@ -119,36 +151,53 @@ jobs:
 
           chmod +x "$RUNNER_TEMP/ios-clang"
 
-          echo "IOS_CC=$RUNNER_TEMP/ios-clang" >> "$GITHUB_ENV"
+          echo "IOS_CC=$RUNNER_TEMP/ios-clang" \
+            >> "$GITHUB_ENV"
 
           "$RUNNER_TEMP/ios-clang" --version
 
-      - name: Customize iOS app
+      # =========================================================
+      # 5. APP NAME / BUNDLE ID
+      # =========================================================
+
+      - name: Customize app information
         shell: bash
         run: |
           set -e
 
           PLIST="$GITHUB_WORKSPACE/Butterscotch/artifacts/ios/assets/Info.plist"
 
-          /usr/libexec/PlistBuddy \
-            -c "Set :CFBundleDisplayName Super R-R iOS" \
-            "$PLIST" || true
+          if [ ! -f "$PLIST" ]; then
+            echo "ERROR: Info.plist missing"
+            exit 1
+          fi
 
           /usr/libexec/PlistBuddy \
-            -c "Set :CFBundleName Super R-R iOS" \
-            "$PLIST" || true
+            -c "Set :CFBundleDisplayName Super R-R" \
+            "$PLIST"
+
+          /usr/libexec/PlistBuddy \
+            -c "Set :CFBundleName Super R-R" \
+            "$PLIST"
 
           /usr/libexec/PlistBuddy \
             -c "Set :CFBundleIdentifier com.negelinho.superrr.ios" \
-            "$PLIST" || true
+            "$PLIST"
 
           /usr/libexec/PlistBuddy \
             -c "Set :MinimumOSVersion 12.0" \
-            "$PLIST" || true
+            "$PLIST"
 
-          echo "Info.plist prepared."
+          echo
+          echo "===== INFO.PLIST ====="
+          plutil -p "$PLIST" | head -n 80
 
-      - name: Bundle Super Redux-Redux into app
+      # =========================================================
+      # 6. PUT ALL SUPER REDUX-REDUX FILES INSIDE THE IPA
+      #    data.win + music + external files + everything else
+      # =========================================================
+
+      - name: Bundle complete Super Redux-Redux
         shell: bash
         run: |
           set -e
@@ -163,19 +212,31 @@ jobs:
             "$BUNDLED/"
 
           if [ ! -f "$BUNDLED/data.win" ]; then
-            echo "ERROR: bundled data.win missing"
+            echo "ERROR: BundledGame/data.win missing"
             exit 1
           fi
 
-          echo "Bundled game size:"
+          echo
+          echo "===== BUNDLED GAME SIZE ====="
           du -sh "$BUNDLED"
 
-      - name: Add first-launch game installer
+          echo
+          echo "===== BUNDLED FILE COUNT ====="
+          find "$BUNDLED" -type f | wc -l
+
+          echo
+          echo "Full Redux game has been bundled."
+
+      # =========================================================
+      # 7. COPY BUNDLED GAME TO DOCUMENTS ON FIRST LAUNCH
+      # =========================================================
+
+      - name: Add automatic first-launch installer
         shell: bash
         run: |
           set -e
 
-          IOS_MAIN="$GITHUB_WORKSPACE/Butterscotch/src/ios/main.c"
+          cd "$GITHUB_WORKSPACE"
 
           python3 <<'PY'
           from pathlib import Path
@@ -183,66 +244,225 @@ jobs:
           p = Path("Butterscotch/src/ios/main.c")
           s = p.read_text()
 
-          needle = '''    gameListVC = [[BSGameListViewController alloc] init];'''
+          needle = '''
+              gameListVC = [[BSGameListViewController alloc] init];
+          '''
 
           patch = r'''
-              /* Super Redux-Redux iOS port:
-               * copy the bundled game into the writable Documents/games
-               * folder on first launch. */
+              /*
+               * Super Redux-Redux iOS:
+               * Install bundled game automatically on first launch.
+               */
+
               @autoreleasepool {
-                  NSFileManager *fm = [NSFileManager defaultManager];
-                  NSArray *roots = bsGamesRootsToScan();
+
+                  NSFileManager *fm =
+                      [NSFileManager defaultManager];
+
+                  NSArray *roots =
+                      bsGamesRootsToScan();
 
                   if ([roots count] > 0) {
-                      NSString *root = [roots objectAtIndex:0];
+
+                      NSString *root =
+                          [roots objectAtIndex:0];
+
                       NSString *gamesDir =
-                          [root stringByAppendingPathComponent:@"games"];
+                          [root stringByAppendingPathComponent:
+                              @"games"];
+
                       NSString *gameDest =
-                          [gamesDir stringByAppendingPathComponent:@"Super R-R"];
+                          [gamesDir stringByAppendingPathComponent:
+                              @"Super R-R"];
+
                       NSString *dataDest =
-                          [gameDest stringByAppendingPathComponent:@"data.win"];
+                          [gameDest stringByAppendingPathComponent:
+                              @"data.win"];
 
                       if (![fm fileExistsAtPath:dataDest]) {
+
                           NSString *source =
                               [[[NSBundle mainBundle] resourcePath]
-                                  stringByAppendingPathComponent:@"BundledGame"];
+                                  stringByAppendingPathComponent:
+                                      @"BundledGame"];
+
+                          NSError *mkdirError = nil;
 
                           [fm createDirectoryAtPath:gamesDir
                               withIntermediateDirectories:YES
                                                attributes:nil
-                                                    error:nil];
+                                                    error:&mkdirError];
 
-                          NSError *copyError = nil;
+                          if (mkdirError) {
 
-                          if (![fm copyItemAtPath:source
-                                         toPath:gameDest
-                                          error:&copyError]) {
-                              NSLog(@"Super R-R: bundled game copy failed: %@",
-                                    copyError);
+                              NSLog(
+                                  @"Super R-R: games directory error: %@",
+                                  mkdirError
+                              );
+
                           } else {
-                              NSLog(@"Super R-R: bundled game installed.");
+
+                              NSError *copyError = nil;
+
+                              BOOL copied =
+                                  [fm copyItemAtPath:source
+                                             toPath:gameDest
+                                              error:&copyError];
+
+                              if (!copied) {
+
+                                  NSLog(
+                                      @"Super R-R: copy failed: %@",
+                                      copyError
+                                  );
+
+                              } else {
+
+                                  NSLog(
+                                      @"Super R-R installed successfully."
+                                  );
+                              }
                           }
                       }
                   }
               }
 
-              gameListVC = [[BSGameListViewController alloc] init];'''
+              gameListVC =
+                  [[BSGameListViewController alloc] init];
+          '''
 
           if needle not in s:
               raise SystemExit(
-                  "ERROR: application startup marker not found"
+                  "ERROR: startup marker not found"
               )
 
-          s = s.replace(needle, patch, 1)
+          s = s.replace(
+              needle,
+              patch,
+              1
+          )
 
           p.write_text(s)
 
-          print("First-launch installer added.")
+          print(
+              "First-launch Super R-R installer added."
+          )
           PY
 
+      # =========================================================
+      # 8. REDUX CONTROL FIX
+      #
+      # Joystick:
+      #   UP    -> W
+      #   DOWN  -> S
+      #   LEFT  -> A
+      #   RIGHT -> D
+      #
+      # First action button:
+      #   SPACE
+      #
+      # Redux maps SPACE -> ENTER in title menu,
+      # therefore START GAME can be selected.
+      # SPACE is also useful inside gameplay.
+      # =========================================================
+
+      - name: Patch Redux touch controls
+        shell: bash
+        run: |
+          set -e
+
+          cd "$GITHUB_WORKSPACE"
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          p = Path("Butterscotch/src/ios/main.c")
+          s = p.read_text()
+
+          # -----------------------------------------
+          # Z BUTTON -> SPACE
+          # -----------------------------------------
+
+          old_button = (
+              '_actionButtons[0] = '
+              '[[BSKeyButton alloc] '
+              'initWithFrame:CGRectZero '
+              "key:'Z' "
+              'label:@"Z" '
+              'font:18.0f '
+              'hitExpansion:6.0f];'
+          )
+
+          new_button = (
+              '_actionButtons[0] = '
+              '[[BSKeyButton alloc] '
+              'initWithFrame:CGRectZero '
+              'key:VK_SPACE '
+              'label:@"A" '
+              'font:18.0f '
+              'hitExpansion:12.0f];'
+          )
+
+          if old_button not in s:
+              raise SystemExit(
+                  "ERROR: original Z button not found"
+              )
+
+          s = s.replace(
+              old_button,
+              new_button,
+              1
+          )
+
+          # -----------------------------------------
+          # DPAD ARROWS -> W S A D
+          # There are two key arrays in BSDpad:
+          # one for release and one for movement.
+          # -----------------------------------------
+
+          old_dpad = (
+              'static const int32_t keys[4] = '
+              '{ VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT };'
+          )
+
+          new_dpad = (
+              "static const int32_t keys[4] = "
+              "{ 'W', 'S', 'A', 'D' };"
+          )
+
+          count = s.count(old_dpad)
+
+          if count < 2:
+              raise SystemExit(
+                  f"ERROR: expected two D-pad mappings, found {count}"
+              )
+
+          s = s.replace(
+              old_dpad,
+              new_dpad
+          )
+
+          p.write_text(s)
+
+          print("Redux controls patched:")
+          print("  joystick = W/A/S/D")
+          print("  A button = SPACE / menu select")
+          PY
+
+          echo
+          echo "===== CONTROL PATCH CHECK ====="
+
           grep -n \
-            "Super Redux-Redux iOS port" \
-            "$IOS_MAIN"
+            "label:@\"A\"" \
+            "$GITHUB_WORKSPACE/Butterscotch/src/ios/main.c"
+
+          grep -n \
+            "{ 'W', 'S', 'A', 'D' }" \
+            "$GITHUB_WORKSPACE/Butterscotch/src/ios/main.c"
+
+      # =========================================================
+      # 9. CLEAN OLD BUILD
+      # =========================================================
 
       - name: Clean Butterscotch
         shell: bash
@@ -253,15 +473,24 @@ jobs:
 
           make distclean || true
 
-      - name: Build ARM64 iOS runner and IPA
+      # =========================================================
+      # 10. BUILD REAL iPHONE ARM64 APP + IPA
+      # =========================================================
+
+      - name: Build Super Redux-Redux for iOS
         shell: bash
         run: |
           set -e
 
           cd "$GITHUB_WORKSPACE/Butterscotch"
 
-          COMMIT_HASH="$(git rev-parse --short HEAD)"
-          COMMIT_DATE="$(git show -s --format=%cs HEAD)"
+          COMMIT_HASH="$(
+            git rev-parse --short HEAD
+          )"
+
+          COMMIT_DATE="$(
+            git show -s --format=%cs HEAD
+          )"
 
           make \
             -j3 \
@@ -277,11 +506,18 @@ jobs:
             BUTTERSCOTCH_COMMIT_DATE="$COMMIT_DATE"
 
           echo
-          echo "===== BUILD FINISHED ====="
+          echo "===== BUILD DIRECTORY ====="
 
-          ls -lh build/
+          find build \
+            -maxdepth 2 \
+            -type f \
+            -print
 
-      - name: Verify iPhone binary
+      # =========================================================
+      # 11. VERIFY IPA + ARM64
+      # =========================================================
+
+      - name: Verify iOS build
         shell: bash
         run: |
           set -e
@@ -290,7 +526,7 @@ jobs:
           IPA="$GITHUB_WORKSPACE/Butterscotch/build/butterscotch.ipa"
 
           if [ ! -f "$BIN" ]; then
-            echo "ERROR: iOS executable missing"
+            echo "ERROR: ARM64 executable missing"
             exit 1
           fi
 
@@ -299,18 +535,35 @@ jobs:
             exit 1
           fi
 
-          echo "Executable:"
+          echo
+          echo "===== EXECUTABLE ====="
           file "$BIN"
 
           echo
-          echo "Architecture:"
+          echo "===== ARCHITECTURE ====="
           lipo -info "$BIN" || true
 
           echo
-          echo "IPA:"
+          echo "===== IPA SIZE ====="
           ls -lh "$IPA"
 
-      - name: Rename first IPA
+          echo
+          echo "===== IPA CONTENTS ====="
+          unzip -l "$IPA" \
+            | head -n 80
+
+          echo
+          echo "===== CHECK BUNDLED DATA.WIN ====="
+
+          unzip -l "$IPA" \
+            | grep -i \
+              "BundledGame/data.win"
+
+      # =========================================================
+      # 12. CREATE FINAL OUTPUT
+      # =========================================================
+
+      - name: Prepare Redux iOS v2
         shell: bash
         run: |
           set -e
@@ -319,44 +572,79 @@ jobs:
 
           cp \
             "$GITHUB_WORKSPACE/Butterscotch/build/butterscotch.ipa" \
-            "$GITHUB_WORKSPACE/output/Super-Redux-Redux-iOS-First-Build.ipa"
+            "$GITHUB_WORKSPACE/output/Super-Redux-Redux-iOS-v2.ipa"
 
-          cat > "$GITHUB_WORKSPACE/output/BUILD_INFO.txt" <<EOF
-          Super Redux-Redux iOS
-          =====================
+          cat > "$GITHUB_WORKSPACE/output/README.txt" <<'EOF'
+          SUPER REDUX-REDUX iOS v2
+          ========================
 
-          Build: First iOS test IPA
-          Architecture: arm64
-          Minimum target: iOS 12
-          Runner: Butterscotch iOS branch
+          iPhone ARM64 build.
 
-          The Super Redux-Redux game files are bundled inside the IPA.
-          On first launch they are copied into the application's
-          Documents/games/Super R-R folder.
+          INCLUDED:
+          - Super Redux-Redux data.win
+          - complete game folder
+          - music and external game files
+          - automatic first-launch game installation
+          - W/A/S/D touch joystick
+          - A button = SPACE
+          - SPACE works as menu confirmation in Redux
+          - iOS Butterscotch runner
 
-          This IPA uses ad-hoc signing.
-          A sideloading tool may need to re-sign it before installation.
+          IMPORTANT:
+          This IPA is unsigned/ad-hoc.
+          Your sideloading method may need to re-sign it.
+
+          CURRENT CONTROL TEST:
+          Left joystick:
+            W / A / S / D
+
+          A:
+            SPACE
+            menu confirm / START GAME
+
+          X:
+            X key
+
+          C:
+            C key
+
+          NEXT CONTROL WORK:
+          touchscreen mouse aiming
+          left-click attack
+          right-click pickup / throw
           EOF
+
+          echo
+          echo "===== FINAL FILES ====="
 
           ls -lh "$GITHUB_WORKSPACE/output"
 
-      - name: Upload first Super Redux-Redux IPA
+      # =========================================================
+      # 13. UPLOAD IPA
+      # =========================================================
+
+      - name: Upload Super Redux-Redux iOS v2
         uses: actions/upload-artifact@v4
         with:
-          name: super-redux-redux-ios-first-ipa
+          name: super-redux-redux-ios-v2
           path: |
-            output/Super-Redux-Redux-iOS-First-Build.ipa
-            output/BUILD_INFO.txt
+            output/Super-Redux-Redux-iOS-v2.ipa
+            output/README.txt
           if-no-files-found: error
           retention-days: 7
 
-      - name: Upload build logs if IPA fails
+      # =========================================================
+      # 14. SAVE DEBUG FILES IF BUILD FAILS
+      # =========================================================
+
+      - name: Upload failed iOS build information
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: super-redux-redux-ios-failed-build
+          name: redux-ios-v2-failed
           path: |
             Butterscotch/compat/config.mk
             Butterscotch/compat/tmp/
+            Butterscotch/src/ios/main.c
           if-no-files-found: ignore
           retention-days: 7
