@@ -9,7 +9,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -28,6 +28,8 @@ jobs:
             --json tagName \
             --jq '.tagName')"
 
+          echo "Latest release: $TAG"
+
           gh release download "$TAG" \
             --pattern "*.zip" \
             --dir "$GITHUB_WORKSPACE/input"
@@ -36,6 +38,14 @@ jobs:
             -type f \
             -iname "*.zip" \
             | head -n 1)"
+
+          if [ -z "$ZIP" ]; then
+            echo "ERROR: Redux ZIP not found"
+            exit 1
+          fi
+
+          echo "ZIP:"
+          echo "$ZIP"
 
           mkdir -p "$GITHUB_WORKSPACE/game"
 
@@ -54,7 +64,7 @@ jobs:
 
           echo "DATAWIN=$DATAWIN" >> "$GITHUB_ENV"
 
-          echo "Found:"
+          echo "Found data.win:"
           echo "$DATAWIN"
 
       - name: Download Butterscotch
@@ -67,6 +77,10 @@ jobs:
             https://github.com/ButterscotchRunner/Butterscotch.git \
             "$GITHUB_WORKSPACE/Butterscotch"
 
+          echo
+          echo "Butterscotch commit:"
+          git -C "$GITHUB_WORKSPACE/Butterscotch" rev-parse HEAD
+
       - name: Install build dependencies
         shell: bash
         run: |
@@ -77,9 +91,30 @@ jobs:
 
           sudo apt-get install -y \
             cmake \
+            ninja-build \
             pkg-config \
-            libglfw3-dev \
-            libbz2-dev
+            libglfw3-dev
+
+      - name: Configure Butterscotch
+        shell: bash
+        run: |
+          set -e
+
+          rm -rf "$GITHUB_WORKSPACE/Butterscotch/build"
+
+          cmake \
+            -S "$GITHUB_WORKSPACE/Butterscotch" \
+            -B "$GITHUB_WORKSPACE/Butterscotch/build" \
+            -G Ninja \
+            -DPLATFORM=cli \
+            -DBACKEND=glfw3 \
+            -DAUDIO_BACKEND=none \
+            -DENABLE_WAD14=OFF \
+            -DENABLE_WAD16=ON \
+            -DENABLE_WAD17=OFF \
+            -DENABLE_ASAN=OFF \
+            -DENABLE_VM_STUB_LOGS=ON \
+            -DCMAKE_BUILD_TYPE=Release
 
       - name: Build Butterscotch
         shell: bash
@@ -87,29 +122,56 @@ jobs:
           set -e
 
           cmake \
-            -S "$GITHUB_WORKSPACE/Butterscotch" \
-            -B "$GITHUB_WORKSPACE/Butterscotch/build" \
-            -DPLATFORM=desktop \
-            -DDESKTOP_BACKEND=glfw3 \
-            -DAUDIO_BACKEND=none \
-            -DENABLE_WAD14=OFF \
-            -DENABLE_WAD16=ON \
-            -DENABLE_WAD17=OFF \
-            -DENABLE_ASAN=OFF \
-            -DCMAKE_BUILD_TYPE=Release
-
-          cmake \
             --build "$GITHUB_WORKSPACE/Butterscotch/build" \
             --parallel 4
 
-      - name: Test data.win loading
+          echo
+          echo "===== BUILD CONTENTS ====="
+
+          find "$GITHUB_WORKSPACE/Butterscotch/build" \
+            -maxdepth 2 \
+            -type f \
+            | sort \
+            | head -n 100
+
+      - name: Find runner
+        shell: bash
+        run: |
+          set -e
+
+          RUNNER="$(find "$GITHUB_WORKSPACE/Butterscotch/build" \
+            -type f \
+            -name "butterscotch" \
+            -perm -111 \
+            | head -n 1)"
+
+          if [ -z "$RUNNER" ]; then
+            echo "ERROR: butterscotch executable not found"
+            exit 1
+          fi
+
+          echo "RUNNER=$RUNNER" >> "$GITHUB_ENV"
+
+          echo "Runner:"
+          echo "$RUNNER"
+
+          "$RUNNER" --help \
+            > "$GITHUB_WORKSPACE/butterscotch_help.txt" \
+            2>&1 \
+            || true
+
+          head -n 100 \
+            "$GITHUB_WORKSPACE/butterscotch_help.txt" \
+            || true
+
+      - name: Test Redux data.win compatibility
         shell: bash
         run: |
           set +e
 
           mkdir -p "$GITHUB_WORKSPACE/results"
 
-          RUNNER="$GITHUB_WORKSPACE/Butterscotch/build/butterscotch"
+          echo "===== ROOMS ====="
 
           "$RUNNER" \
             "$DATAWIN" \
@@ -118,18 +180,15 @@ jobs:
             > "$GITHUB_WORKSPACE/results/ROOMS.txt" \
             2>&1
 
-          echo $? \
+          ROOMS_EXIT=$?
+
+          echo "$ROOMS_EXIT" \
             > "$GITHUB_WORKSPACE/results/ROOMS_EXIT_CODE.txt"
 
-          "$RUNNER" \
-            "$DATAWIN" \
-            --headless \
-            --print-unknown-functions \
-            > "$GITHUB_WORKSPACE/results/UNKNOWN_FUNCTIONS.txt" \
-            2>&1
+          echo "Rooms exit code: $ROOMS_EXIT"
 
-          echo $? \
-            > "$GITHUB_WORKSPACE/results/UNKNOWN_EXIT_CODE.txt"
+          echo
+          echo "===== OBJECTS ====="
 
           "$RUNNER" \
             "$DATAWIN" \
@@ -138,11 +197,85 @@ jobs:
             > "$GITHUB_WORKSPACE/results/OBJECTS.txt" \
             2>&1
 
-          echo $? \
+          OBJECTS_EXIT=$?
+
+          echo "$OBJECTS_EXIT" \
             > "$GITHUB_WORKSPACE/results/OBJECTS_EXIT_CODE.txt"
 
-          echo "=== UNKNOWN FUNCTIONS ==="
-          cat "$GITHUB_WORKSPACE/results/UNKNOWN_FUNCTIONS.txt"
+          echo "Objects exit code: $OBJECTS_EXIT"
+
+          echo
+          echo "===== UNKNOWN FUNCTIONS ====="
+
+          "$RUNNER" \
+            "$DATAWIN" \
+            --headless \
+            --print-unknown-functions \
+            > "$GITHUB_WORKSPACE/results/UNKNOWN_FUNCTIONS.txt" \
+            2>&1
+
+          UNKNOWN_EXIT=$?
+
+          echo "$UNKNOWN_EXIT" \
+            > "$GITHUB_WORKSPACE/results/UNKNOWN_EXIT_CODE.txt"
+
+          echo "Unknown-functions exit code: $UNKNOWN_EXIT"
+
+          echo
+          echo "===== UNKNOWN FUNCTIONS OUTPUT ====="
+
+          cat "$GITHUB_WORKSPACE/results/UNKNOWN_FUNCTIONS.txt" \
+            || true
+
+          echo
+          echo "===== SHADERS ====="
+
+          "$RUNNER" \
+            "$DATAWIN" \
+            --headless \
+            --print-shaders \
+            > "$GITHUB_WORKSPACE/results/SHADERS.txt" \
+            2>&1
+
+          echo $? \
+            > "$GITHUB_WORKSPACE/results/SHADERS_EXIT_CODE.txt"
+
+          echo
+          echo "Compatibility tests finished."
+
+          exit 0
+
+      - name: Create compatibility report
+        shell: bash
+        run: |
+          {
+            echo "HOTLINE MIAMI SUPER REDUX-REDUX"
+            echo "Butterscotch Compatibility Test"
+            echo "================================"
+            echo
+            echo "Rooms exit:"
+            cat "$GITHUB_WORKSPACE/results/ROOMS_EXIT_CODE.txt"
+            echo
+            echo "Objects exit:"
+            cat "$GITHUB_WORKSPACE/results/OBJECTS_EXIT_CODE.txt"
+            echo
+            echo "Unknown functions exit:"
+            cat "$GITHUB_WORKSPACE/results/UNKNOWN_EXIT_CODE.txt"
+            echo
+            echo "Unknown function lines:"
+            wc -l \
+              < "$GITHUB_WORKSPACE/results/UNKNOWN_FUNCTIONS.txt"
+            echo
+            echo "Room output lines:"
+            wc -l \
+              < "$GITHUB_WORKSPACE/results/ROOMS.txt"
+            echo
+            echo "Object output lines:"
+            wc -l \
+              < "$GITHUB_WORKSPACE/results/OBJECTS.txt"
+          } > "$GITHUB_WORKSPACE/results/REPORT.txt"
+
+          cat "$GITHUB_WORKSPACE/results/REPORT.txt"
 
       - name: Upload compatibility results
         uses: actions/upload-artifact@v4
