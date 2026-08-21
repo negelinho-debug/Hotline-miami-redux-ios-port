@@ -1,0 +1,362 @@
+name: Super Redux-Redux iOS IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios:
+    runs-on: macos-14
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Super Redux-Redux
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+
+          mkdir -p "$GITHUB_WORKSPACE/input"
+
+          TAG="$(gh release view \
+            --json tagName \
+            --jq '.tagName')"
+
+          echo "Latest release: $TAG"
+
+          gh release download "$TAG" \
+            --pattern "*.zip" \
+            --dir "$GITHUB_WORKSPACE/input"
+
+          ZIP="$(find "$GITHUB_WORKSPACE/input" \
+            -type f \
+            -iname "*.zip" \
+            | head -n 1)"
+
+          if [ -z "$ZIP" ]; then
+            echo "ERROR: Redux ZIP not found"
+            exit 1
+          fi
+
+          mkdir -p "$GITHUB_WORKSPACE/game"
+
+          unzip -q "$ZIP" \
+            -d "$GITHUB_WORKSPACE/game"
+
+          DATAWIN="$(find "$GITHUB_WORKSPACE/game" \
+            -type f \
+            -iname "data.win" \
+            | head -n 1)"
+
+          if [ -z "$DATAWIN" ]; then
+            echo "ERROR: data.win not found"
+            exit 1
+          fi
+
+          GAME_DIR="$(dirname "$DATAWIN")"
+
+          echo "DATAWIN=$DATAWIN" >> "$GITHUB_ENV"
+          echo "GAME_DIR=$GAME_DIR" >> "$GITHUB_ENV"
+
+          echo "Game root:"
+          echo "$GAME_DIR"
+
+          ls -lah "$GAME_DIR" | head -n 50
+
+      - name: Download Butterscotch iOS port
+        shell: bash
+        run: |
+          set -e
+
+          git clone \
+            --depth 1 \
+            --branch ios \
+            https://github.com/Un1q32/Butterscotch.git \
+            "$GITHUB_WORKSPACE/Butterscotch"
+
+          cd "$GITHUB_WORKSPACE/Butterscotch"
+
+          echo "iOS branch commit:"
+          git rev-parse HEAD
+
+      - name: Show Xcode environment
+        shell: bash
+        run: |
+          set -e
+
+          xcodebuild -version
+
+          echo
+          echo "iPhoneOS SDK:"
+          xcrun --sdk iphoneos --show-sdk-path
+
+          echo
+          echo "Clang:"
+          xcrun --sdk iphoneos --find clang
+
+      - name: Create iOS compiler wrapper
+        shell: bash
+        run: |
+          set -e
+
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          CLANG="$(xcrun --sdk iphoneos --find clang)"
+
+          cat > "$RUNNER_TEMP/ios-clang" <<EOF
+          #!/bin/bash
+          exec "$CLANG" \
+            -target arm64-apple-ios12.0 \
+            -arch arm64 \
+            -isysroot "$SDK" \
+            "\$@"
+          EOF
+
+          chmod +x "$RUNNER_TEMP/ios-clang"
+
+          echo "IOS_CC=$RUNNER_TEMP/ios-clang" >> "$GITHUB_ENV"
+
+          "$RUNNER_TEMP/ios-clang" --version
+
+      - name: Customize iOS app
+        shell: bash
+        run: |
+          set -e
+
+          PLIST="$GITHUB_WORKSPACE/Butterscotch/artifacts/ios/assets/Info.plist"
+
+          /usr/libexec/PlistBuddy \
+            -c "Set :CFBundleDisplayName Super R-R iOS" \
+            "$PLIST" || true
+
+          /usr/libexec/PlistBuddy \
+            -c "Set :CFBundleName Super R-R iOS" \
+            "$PLIST" || true
+
+          /usr/libexec/PlistBuddy \
+            -c "Set :CFBundleIdentifier com.negelinho.superrr.ios" \
+            "$PLIST" || true
+
+          /usr/libexec/PlistBuddy \
+            -c "Set :MinimumOSVersion 12.0" \
+            "$PLIST" || true
+
+          echo "Info.plist prepared."
+
+      - name: Bundle Super Redux-Redux into app
+        shell: bash
+        run: |
+          set -e
+
+          BUNDLED="$GITHUB_WORKSPACE/Butterscotch/artifacts/ios/assets/BundledGame"
+
+          rm -rf "$BUNDLED"
+          mkdir -p "$BUNDLED"
+
+          rsync -a \
+            "$GAME_DIR/" \
+            "$BUNDLED/"
+
+          if [ ! -f "$BUNDLED/data.win" ]; then
+            echo "ERROR: bundled data.win missing"
+            exit 1
+          fi
+
+          echo "Bundled game size:"
+          du -sh "$BUNDLED"
+
+      - name: Add first-launch game installer
+        shell: bash
+        run: |
+          set -e
+
+          IOS_MAIN="$GITHUB_WORKSPACE/Butterscotch/src/ios/main.c"
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          p = Path("Butterscotch/src/ios/main.c")
+          s = p.read_text()
+
+          needle = '''    gameListVC = [[BSGameListViewController alloc] init];'''
+
+          patch = r'''
+              /* Super Redux-Redux iOS port:
+               * copy the bundled game into the writable Documents/games
+               * folder on first launch. */
+              @autoreleasepool {
+                  NSFileManager *fm = [NSFileManager defaultManager];
+                  NSArray *roots = bsGamesRootsToScan();
+
+                  if ([roots count] > 0) {
+                      NSString *root = [roots objectAtIndex:0];
+                      NSString *gamesDir =
+                          [root stringByAppendingPathComponent:@"games"];
+                      NSString *gameDest =
+                          [gamesDir stringByAppendingPathComponent:@"Super R-R"];
+                      NSString *dataDest =
+                          [gameDest stringByAppendingPathComponent:@"data.win"];
+
+                      if (![fm fileExistsAtPath:dataDest]) {
+                          NSString *source =
+                              [[[NSBundle mainBundle] resourcePath]
+                                  stringByAppendingPathComponent:@"BundledGame"];
+
+                          [fm createDirectoryAtPath:gamesDir
+                              withIntermediateDirectories:YES
+                                               attributes:nil
+                                                    error:nil];
+
+                          NSError *copyError = nil;
+
+                          if (![fm copyItemAtPath:source
+                                         toPath:gameDest
+                                          error:&copyError]) {
+                              NSLog(@"Super R-R: bundled game copy failed: %@",
+                                    copyError);
+                          } else {
+                              NSLog(@"Super R-R: bundled game installed.");
+                          }
+                      }
+                  }
+              }
+
+              gameListVC = [[BSGameListViewController alloc] init];'''
+
+          if needle not in s:
+              raise SystemExit(
+                  "ERROR: application startup marker not found"
+              )
+
+          s = s.replace(needle, patch, 1)
+
+          p.write_text(s)
+
+          print("First-launch installer added.")
+          PY
+
+          grep -n \
+            "Super Redux-Redux iOS port" \
+            "$IOS_MAIN"
+
+      - name: Clean Butterscotch
+        shell: bash
+        run: |
+          set -e
+
+          cd "$GITHUB_WORKSPACE/Butterscotch"
+
+          make distclean || true
+
+      - name: Build ARM64 iOS runner and IPA
+        shell: bash
+        run: |
+          set -e
+
+          cd "$GITHUB_WORKSPACE/Butterscotch"
+
+          COMMIT_HASH="$(git rev-parse --short HEAD)"
+          COMMIT_DATE="$(git show -s --format=%cs HEAD)"
+
+          make \
+            -j3 \
+            OS=iOS \
+            CC="$IOS_CC" \
+            DISABLE_WAD14=1 \
+            DISABLE_WAD17=1 \
+            DISABLE_VM_GML_PROFILER=1 \
+            DISABLE_VM_OPCODE_PROFILER=1 \
+            DISABLE_VM_STUB_LOGS=1 \
+            DISABLE_VM_TRACING=1 \
+            BUTTERSCOTCH_COMMIT_HASH="$COMMIT_HASH" \
+            BUTTERSCOTCH_COMMIT_DATE="$COMMIT_DATE"
+
+          echo
+          echo "===== BUILD FINISHED ====="
+
+          ls -lh build/
+
+      - name: Verify iPhone binary
+        shell: bash
+        run: |
+          set -e
+
+          BIN="$GITHUB_WORKSPACE/Butterscotch/build/butterscotch"
+          IPA="$GITHUB_WORKSPACE/Butterscotch/build/butterscotch.ipa"
+
+          if [ ! -f "$BIN" ]; then
+            echo "ERROR: iOS executable missing"
+            exit 1
+          fi
+
+          if [ ! -f "$IPA" ]; then
+            echo "ERROR: IPA missing"
+            exit 1
+          fi
+
+          echo "Executable:"
+          file "$BIN"
+
+          echo
+          echo "Architecture:"
+          lipo -info "$BIN" || true
+
+          echo
+          echo "IPA:"
+          ls -lh "$IPA"
+
+      - name: Rename first IPA
+        shell: bash
+        run: |
+          set -e
+
+          mkdir -p "$GITHUB_WORKSPACE/output"
+
+          cp \
+            "$GITHUB_WORKSPACE/Butterscotch/build/butterscotch.ipa" \
+            "$GITHUB_WORKSPACE/output/Super-Redux-Redux-iOS-First-Build.ipa"
+
+          cat > "$GITHUB_WORKSPACE/output/BUILD_INFO.txt" <<EOF
+          Super Redux-Redux iOS
+          =====================
+
+          Build: First iOS test IPA
+          Architecture: arm64
+          Minimum target: iOS 12
+          Runner: Butterscotch iOS branch
+
+          The Super Redux-Redux game files are bundled inside the IPA.
+          On first launch they are copied into the application's
+          Documents/games/Super R-R folder.
+
+          This IPA uses ad-hoc signing.
+          A sideloading tool may need to re-sign it before installation.
+          EOF
+
+          ls -lh "$GITHUB_WORKSPACE/output"
+
+      - name: Upload first Super Redux-Redux IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: super-redux-redux-ios-first-ipa
+          path: |
+            output/Super-Redux-Redux-iOS-First-Build.ipa
+            output/BUILD_INFO.txt
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload build logs if IPA fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: super-redux-redux-ios-failed-build
+          path: |
+            Butterscotch/compat/config.mk
+            Butterscotch/compat/tmp/
+          if-no-files-found: ignore
+          retention-days: 7
