@@ -1,4 +1,4 @@
-name: Super Redux-Redux iOS FINAL MAX FPS v10 FIXED
+name: Super Redux-Redux iOS FINAL MAX FPS v10 FINAL FIX
 
 on:
   workflow_dispatch:
@@ -16,6 +16,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
 
     steps:
+
       # ==========================================================
       # CHECKOUT
       # ==========================================================
@@ -24,40 +25,86 @@ jobs:
         uses: actions/checkout@v4
 
       # ==========================================================
-      # CHECK OLD v9 WORKFLOW
+      # DOWNLOAD KNOWN-GOOD v9 WORKFLOW
+      #
+      # IMPORTANT:
+      # 57b87ad = Super Redux-Redux iOS FPS Diagnosis v9 FIXED 2
+      #
+      # We no longer try to read the current workflow from itself.
       # ==========================================================
 
-      - name: Check existing Super RR workflow
+      - name: Download known-good v9 base
         shell: bash
         run: |
           set -e
 
-          BASE="$GITHUB_WORKSPACE/.github/workflows/redux_ios_build.yml"
+          BASE="$RUNNER_TEMP/redux_v9_base.yml"
 
-          if [ ! -f "$BASE" ]; then
-            echo "ERROR: redux_ios_build.yml not found"
-            echo "Keep the old v9 workflow in the repository."
-            exit 1
-          fi
+          curl \
+            -L \
+            --fail \
+            --retry 3 \
+            -o "$BASE" \
+            "https://raw.githubusercontent.com/negelinho-debug/Hotline-miami-redux-ios-port/57b87ad/.github/workflows/redux_ios_build.yml"
 
-          grep -n "Download Super Redux-Redux" "$BASE"
-          grep -n "Patch Redux gameplay controls" "$BASE"
-          grep -n "Add R LOOK LOCK" "$BASE"
-          grep -n "Add PAUSE FPS and right LOOK" "$BASE"
-          grep -n "Force Modern GL and performance mode" "$BASE"
+          test -s "$BASE"
+
+          echo "BASE_WORKFLOW=$BASE" \
+            >> "$GITHUB_ENV"
 
           echo
-          echo "Base workflow ready."
+          echo "======================================"
+          echo "KNOWN-GOOD v9 DOWNLOADED"
+          echo "======================================"
+
+          head -n 5 "$BASE"
+
+          echo
+          echo "Checking required steps..."
+
+          grep -n \
+            "name: Download Super Redux-Redux" \
+            "$BASE"
+
+          grep -n \
+            "name: Download Butterscotch iOS" \
+            "$BASE"
+
+          grep -n \
+            "name: Patch Redux rendering" \
+            "$BASE"
+
+          grep -n \
+            "name: Patch Redux gameplay controls" \
+            "$BASE"
+
+          grep -n \
+            "name: Add R LOOK LOCK" \
+            "$BASE"
+
+          grep -n \
+            "name: Add PAUSE FPS and right LOOK" \
+            "$BASE"
+
+          grep -n \
+            "name: Force Modern GL and performance mode" \
+            "$BASE"
+
+          grep -n \
+            "name: Fix iOS math compatibility" \
+            "$BASE"
+
+          grep -n \
+            "name: Add automatic game installer" \
+            "$BASE"
+
+          echo
+          echo "All required v9 steps found."
 
       # ==========================================================
-      # REUSE ALL WORKING v9 PATCHES
+      # EXTRACT + RUN KNOWN-GOOD STEPS
       #
-      # IMPORTANT FIX:
-      #
-      # python3 -
-      #
-      # means Python reads the helper program from stdin.
-      # The old YAML is NOT executed as Python anymore.
+      # This parser ignores exact YAML indentation differences.
       # ==========================================================
 
       - name: Apply known-good Super RR patches
@@ -65,7 +112,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          BASE="$GITHUB_WORKSPACE/.github/workflows/redux_ios_build.yml"
+          BASE="$BASE_WORKFLOW"
 
           run_old_step() {
 
@@ -73,24 +120,24 @@ jobs:
 
             TMP_SCRIPT="$RUNNER_TEMP/superrr-step.sh"
 
+            rm -f "$TMP_SCRIPT"
+
             echo
             echo "========================================"
             echo "RUNNING: $STEP_NAME"
             echo "========================================"
 
-            python3 - "$BASE" "$STEP_NAME" "$TMP_SCRIPT" <<'PY'
+            python3 - \
+              "$BASE" \
+              "$STEP_NAME" \
+              "$TMP_SCRIPT" \
+              <<'PY'
           from pathlib import Path
           import sys
 
-          workflow_path = Path(
-              sys.argv[1]
-          )
-
+          workflow_path = Path(sys.argv[1])
           wanted_name = sys.argv[2]
-
-          output_path = Path(
-              sys.argv[3]
-          )
+          output_path = Path(sys.argv[3])
 
           lines = (
               workflow_path
@@ -98,8 +145,8 @@ jobs:
               .splitlines()
           )
 
-          step_line = (
-              "      - name: " +
+          wanted = (
+              "- name: " +
               wanted_name
           )
 
@@ -107,12 +154,24 @@ jobs:
 
           for i, line in enumerate(lines):
 
-              if line.rstrip() == step_line:
-
+              if line.strip() == wanted:
                   start_index = i
                   break
 
           if start_index is None:
+
+              print("")
+              print("AVAILABLE STEP NAMES:")
+
+              for line in lines:
+                  stripped = line.strip()
+
+                  if stripped.startswith(
+                      "- name: "
+                  ):
+                      print(
+                          stripped[8:]
+                      )
 
               raise SystemExit(
                   "ERROR: step not found: " +
@@ -126,17 +185,17 @@ jobs:
               len(lines)
           ):
 
-              line = lines[i]
+              stripped = (
+                  lines[i]
+                  .strip()
+              )
 
-              if line.startswith(
-                  "      - name: "
+              if stripped.startswith(
+                  "- name: "
               ):
                   break
 
-              if line.rstrip() == (
-                  "        run: |"
-              ):
-
+              if stripped == "run: |":
                   run_index = i
                   break
 
@@ -147,6 +206,19 @@ jobs:
                   wanted_name
               )
 
+          run_line = lines[run_index]
+
+          run_indent = (
+              len(run_line) -
+              len(
+                  run_line.lstrip(" ")
+              )
+          )
+
+          content_indent = (
+              run_indent + 2
+          )
+
           code = []
 
           for i in range(
@@ -156,24 +228,8 @@ jobs:
 
               line = lines[i]
 
-              if line.startswith(
-                  "      - name: "
-              ):
-                  break
-
               if line.strip() == "":
-
                   code.append("")
-                  continue
-
-              if line.startswith(
-                  "          "
-              ):
-
-                  code.append(
-                      line[10:]
-                  )
-
                   continue
 
               indent = (
@@ -183,12 +239,22 @@ jobs:
                   )
               )
 
-              if indent < 10:
+              if indent <= run_indent:
                   break
 
-              code.append(
-                  line[10:]
-              )
+              if indent >= content_indent:
+
+                  code.append(
+                      line[
+                          content_indent:
+                      ]
+                  )
+
+              else:
+
+                  code.append(
+                      line.lstrip()
+                  )
 
           if not code:
 
@@ -208,19 +274,28 @@ jobs:
           )
           PY
 
+            echo
+            echo "----- SCRIPT START -----"
+
+            head \
+              -n 10 \
+              "$TMP_SCRIPT"
+
+            echo "------ SCRIPT END ------"
+            echo
+
             chmod +x \
               "$TMP_SCRIPT"
 
             bash \
               "$TMP_SCRIPT"
 
-            # ----------------------------------------------
-            # Old Actions steps can write variables such as
-            # GAME_DIR and IOS_CC into GITHUB_ENV.
+            # ------------------------------------------------------
+            # GitHub normally applies GITHUB_ENV between steps.
             #
-            # Because we execute several old steps inside
-            # this one step, reload simple KEY=value lines.
-            # ----------------------------------------------
+            # Here multiple old steps execute inside one step,
+            # so reload simple NAME=value variables immediately.
+            # ------------------------------------------------------
 
             if [ -f "$GITHUB_ENV" ]; then
 
@@ -229,7 +304,21 @@ jobs:
                 case "$ENV_LINE" in
 
                   *=*)
-                    export "$ENV_LINE"
+
+                    KEY="${ENV_LINE%%=*}"
+                    VALUE="${ENV_LINE#*=}"
+
+                    case "$KEY" in
+
+                      GAME_DIR|DATAWIN|IOS_CC)
+
+                        export \
+                          "$KEY=$VALUE"
+
+                        ;;
+
+                    esac
+
                     ;;
 
                 esac
@@ -243,7 +332,7 @@ jobs:
           }
 
           # ======================================================
-          # SAME PATCHES / CONTROLS FROM v9
+          # ORIGINAL WORKING v9 CONTENT
           # ======================================================
 
           run_old_step \
@@ -279,32 +368,22 @@ jobs:
           run_old_step \
             "Force Modern GL and performance mode"
 
-          # ======================================================
-          # KEEP MATH FIX + AUTOMATIC GAME INSTALLER
-          # ======================================================
-
           run_old_step \
             "Fix iOS math compatibility"
 
           run_old_step \
             "Add automatic game installer"
 
-          # ======================================================
-          # WE INTENTIONALLY DO NOT RUN:
-          #
-          # Add GML profiler switch
-          # Save profiler results to Files app
-          #
-          # Final build has profiler completely compiled out.
-          # ======================================================
-
           echo
           echo "========================================"
-          echo "ALL BASE PATCHES APPLIED"
+          echo "ALL KNOWN-GOOD v9 PATCHES APPLIED"
           echo "========================================"
 
       # ==========================================================
-      # FINAL PERFORMANCE CHANGES
+      # FINAL v10 PERFORMANCE
+      #
+      # Keep everything from v9.
+      # Add final performance tuning only.
       # ==========================================================
 
       - name: Apply FINAL MAX FPS tuning
@@ -331,49 +410,71 @@ jobs:
           s = main.read_text()
 
           # ======================================================
-          # 1. REMOVE UNUSED PHYSICAL CONTROLLER POLLING
+          # REMOVE PHYSICAL CONTROLLER POLLING
           #
-          # Touch controls stay.
+          # Touch controls remain.
           # ======================================================
 
-          controller_pattern = re.compile(
-              r'(bool\s+platformHandleEvents'
-              r'\s*\(\s*void\s*\)\s*\{\s*)'
-              r'bsPollGameControllers'
-              r'\s*\(\s*\)\s*;\s*',
-              re.MULTILINE
-          )
+          old = '''bool platformHandleEvents(void) {
+              bsPollGameControllers();
+              bsDrainKeyEvents();
+              bsDrainMouseEvents();'''
 
-          s2, count = (
-              controller_pattern.subn(
-                  r'\1',
-                  s,
-                  count=1
+          new = '''bool platformHandleEvents(void) {
+              bsDrainKeyEvents();
+              bsDrainMouseEvents();'''
+
+          if old in s:
+
+              s = s.replace(
+                  old,
+                  new,
+                  1
               )
-          )
-
-          if count == 1:
-
-              s = s2
 
               print(
-                  "Controller polling removed."
+                  "Physical controller polling removed."
               )
 
           else:
 
-              print(
-                  "Controller polling already absent."
+              pattern = re.compile(
+                  r'(\bbool\s+'
+                  r'platformHandleEvents'
+                  r'\s*\(\s*void\s*\)'
+                  r'\s*\{\s*)'
+                  r'bsPollGameControllers'
+                  r'\s*\(\s*\)\s*;',
+                  re.MULTILINE
               )
 
+              s2, count = pattern.subn(
+                  r'\1',
+                  s,
+                  count=1
+              )
+
+              if count == 1:
+
+                  s = s2
+
+                  print(
+                      "Physical controller polling removed by regex."
+                  )
+
+              else:
+
+                  print(
+                      "Physical controller polling already absent."
+                  )
+
           # ======================================================
-          # 2. FINAL INTERNAL RESOLUTION
+          # INTERNAL RESOLUTION
           #
-          # v9 used 72%.
+          # v9 = 72%
+          # v10 = 60%
           #
-          # v10 uses 60%.
-          #
-          # This renders about 36% as many pixels as native.
+          # 0.60 * 0.60 = 36% of native pixel count.
           # ======================================================
 
           if (
@@ -388,7 +489,7 @@ jobs:
               )
 
               print(
-                  "Framebuffer scale changed 72% -> 60%."
+                  "Framebuffer 72% -> 60%."
               )
 
           elif (
@@ -397,20 +498,20 @@ jobs:
           ):
 
               print(
-                  "Framebuffer already at 60%."
+                  "Framebuffer already 60%."
               )
 
           else:
 
               raise SystemExit(
-                  "ERROR: existing render scale patch missing"
+                  "ERROR: render scale patch not found"
               )
 
           # ======================================================
-          # 3. FORCE HIGH-RES OPTION OFF
+          # FORCE HIGH RES OFF
           # ======================================================
 
-          highres_pattern = re.compile(
+          pattern = re.compile(
               r'static\s+bool\s+'
               r'bsLoadHighResEnabled'
               r'\s*\(\s*void\s*\)'
@@ -418,16 +519,14 @@ jobs:
               re.DOTALL
           )
 
-          highres_replacement = '''static bool bsLoadHighResEnabled(void) {
+          replacement = '''static bool bsLoadHighResEnabled(void) {
               return false;
           }'''
 
-          s2, count = (
-              highres_pattern.subn(
-                  highres_replacement,
-                  s,
-                  count=1
-              )
+          s2, count = pattern.subn(
+              replacement,
+              s,
+              count=1
           )
 
           if count == 1:
@@ -441,7 +540,7 @@ jobs:
           else:
 
               print(
-                  "High-resolution function not changed."
+                  "High-resolution function already patched or absent."
               )
 
           main.write_text(
@@ -453,7 +552,7 @@ jobs:
               "======================================"
           )
           print(
-              "FINAL MAX FPS TUNING APPLIED"
+              "FINAL MAX FPS TUNING COMPLETE"
           )
           print(
               "======================================"
@@ -461,7 +560,7 @@ jobs:
           PY
 
       # ==========================================================
-      # VERIFY
+      # VERIFY CONTROLS + PERFORMANCE
       # ==========================================================
 
       - name: Verify FINAL patches
@@ -477,49 +576,49 @@ jobs:
           echo "======================================"
 
           echo
-          echo "Modern GL:"
+          echo "MODERN GL"
 
           grep -n \
             "return BS_RENDERER_MODERN_GL" \
             "$MAIN"
 
           echo
-          echo "60% framebuffer:"
+          echo "60 PERCENT FRAMEBUFFER"
 
           grep -n \
             "targetScale \*= 0.60f" \
             "$MAIN"
 
           echo
-          echo "R:"
+          echo "R"
 
           grep -n \
             "key:'R'" \
             "$MAIN"
 
           echo
-          echo "LOOK:"
+          echo "LOOK"
 
           grep -n \
             'label:@"LOOK"' \
             "$MAIN"
 
           echo
-          echo "LOCK:"
+          echo "LOCK"
 
           grep -n \
             'label:@"LOCK"' \
             "$MAIN"
 
           echo
-          echo "PAUSE:"
+          echo "PAUSE"
 
           grep -n \
             'label:@"II"' \
             "$MAIN"
 
           echo
-          echo "FPS counter:"
+          echo "FPS COUNTER"
 
           grep -n \
             "bsDisplayedFPS" \
@@ -527,7 +626,7 @@ jobs:
             | head
 
           echo
-          echo "RIGHT LOOK:"
+          echo "RIGHT LOOK STICK"
 
           grep -n \
             "BSLookPad" \
@@ -535,7 +634,7 @@ jobs:
             | head
 
           echo
-          echo "Bundled installer:"
+          echo "AUTO INSTALLER"
 
           grep -n \
             "Super R-R installed" \
@@ -543,14 +642,14 @@ jobs:
 
           echo
           echo "======================================"
-          echo "ALL FINAL PATCHES PRESENT"
+          echo "EVERYTHING PRESENT"
           echo "======================================"
 
       # ==========================================================
-      # A14 OPTIMIZATION
+      # A14 CPU TUNING
+      # iPhone 12 = A14
       #
-      # Use it only if the installed clang supports it.
-      # Otherwise safely stay generic ARM64.
+      # Only use flags if compiler accepts them.
       # ==========================================================
 
       - name: Detect Apple A14 compiler tuning
@@ -579,13 +678,13 @@ jobs:
             CPU_FLAGS="-mcpu=apple-a14 -mtune=apple-a14"
 
             echo
-            echo "Apple A14 tuning supported."
+            echo "Apple A14 optimization ENABLED."
 
           else
 
             echo
-            echo "Apple A14 tuning unavailable."
-            echo "Using generic ARM64 safely."
+            echo "A14-specific flags unsupported."
+            echo "Using normal ARM64."
 
           fi
 
@@ -599,17 +698,18 @@ jobs:
       - name: Clean previous build
         shell: bash
         run: |
+          set -e
+
           cd "$GITHUB_WORKSPACE/Butterscotch"
 
-          make distclean || true
+          make \
+            distclean \
+            || true
 
       # ==========================================================
-      # FINAL RELEASE BUILD
+      # FINAL BUILD
       #
-      # NO DIAGNOSTIC PROFILER.
-      # NO PROFILER FILE.
-      #
-      # We want minimum runtime overhead now.
+      # ALL DIAGNOSTIC PROFILERS COMPILED OUT.
       # ==========================================================
 
       - name: Build FINAL MAX FPS
@@ -635,25 +735,29 @@ jobs:
           echo "======================================"
           echo "SUPER REDUX-REDUX FINAL MAX FPS v10"
           echo "======================================"
+
           echo
           echo "ARM64"
-          echo "CPU flags: $CPU_FLAGS"
+          echo "CPU: $CPU_FLAGS"
+
           echo
-          echo "Modern GL forced"
-          echo "60% framebuffer"
-          echo "High resolution OFF"
-          echo "Controller polling OFF"
+          echo "Modern GL = ON"
+          echo "Framebuffer = 60%"
+          echo "High Resolution = OFF"
+
           echo
-          echo "GML profiler COMPILED OUT"
-          echo "Opcode profiler COMPILED OUT"
-          echo "Tracing COMPILED OUT"
-          echo "Stub logs COMPILED OUT"
+          echo "GML profiler = OFF"
+          echo "Opcode profiler = OFF"
+          echo "Stub logging = OFF"
+          echo "VM tracing = OFF"
+
           echo
-          echo "O3"
-          echo "Thin LTO"
-          echo "Frame pointer OFF"
-          echo "Math errno OFF"
-          echo "FP contraction FAST"
+          echo "Optimization = O3"
+          echo "Thin LTO = ON"
+          echo "Frame pointer = OFF"
+          echo "Math errno = OFF"
+          echo "FP contraction = FAST"
+
           echo
           echo "======================================"
 
@@ -693,6 +797,7 @@ jobs:
                   -200 \
               || true
 
+            echo
             echo "======================================"
 
             exit "$STATUS"
@@ -700,7 +805,7 @@ jobs:
 
           echo
           echo "======================================"
-          echo "BUILD FINISHED"
+          echo "FINAL BUILD FINISHED"
           echo "======================================"
 
           find build \
@@ -725,12 +830,13 @@ jobs:
           test -f "$BIN"
 
           echo
-          echo "Binary:"
+          echo "BINARY"
 
-          file "$BIN"
+          file \
+            "$BIN"
 
           echo
-          echo "Architecture:"
+          echo "ARCHITECTURE"
 
           lipo \
             -info \
@@ -738,14 +844,14 @@ jobs:
             || true
 
           echo
-          echo "IPA:"
+          echo "IPA"
 
           ls \
             -lh \
             "$IPA"
 
           echo
-          echo "Bundled data.win:"
+          echo "GAME DATA"
 
           unzip \
             -l \
@@ -755,7 +861,7 @@ jobs:
                 "BundledGame/data.win"
 
       # ==========================================================
-      # PREPARE OUTPUT
+      # OUTPUT
       # ==========================================================
 
       - name: Prepare FINAL IPA
@@ -777,109 +883,101 @@ jobs:
           FINAL MAX FPS v10
           ===================
 
+          FINAL PERFORMANCE ATTEMPT
+
+
           PERFORMANCE
           -----------
 
-          Modern GL forced
-
           ARM64
 
-          Apple A14 tuning
-          when compiler supports it
+          Apple A14 CPU tuning
+          when supported
 
-          O3
-
-          Thin LTO
+          Modern GL forced
 
           60 percent internal framebuffer
 
-          High-resolution mode OFF
+          High resolution disabled
 
-          Physical controller polling OFF
+          Physical controller polling removed
 
-          GML profiler compiled out
+          O3 optimization
 
-          Opcode profiler compiled out
+          Thin LTO
 
-          VM tracing compiled out
+          Frame pointer disabled
 
-          Stub logging compiled out
+          Math errno disabled
+
+          Fast FP contraction
+
+
+          DISABLED
+          --------
+
+          GML profiler
+
+          Opcode profiler
+
+          Stub logs
+
+          VM tracing
 
 
           CONTROLS
           --------
 
           LEFT STICK
-
           movement
 
-
           RIGHT LOOK
-
           look / aim
 
-
           TOUCH GAME AREA
-
-          direct aim
-
+          direct aiming
 
           A
-
           shoot / punch / Enter
 
-
           X
-
           pickup / throw
 
-
           C
-
           interaction
 
-
           R
-
           restart
 
-
           LOOK
-
           Shift
 
-
           LOCK
-
           middle mouse
 
-
           II
-
           pause
 
-
           FPS
-
           real FPS counter
 
 
-          TEST
-          ----
+          TEST THESE
+          ----------
 
-          1. Mask selection
+          MASK SCREEN
 
-          2. Normal level
+          NORMAL LEVEL
 
-          3. Fight with several enemies
+          LEVEL WITH SEVERAL ENEMIES
 
 
-          IPA is unsigned/ad-hoc.
+          IPA unsigned/ad-hoc.
           EOF
 
           echo
           echo "======================================"
-          echo "OUTPUT"
+          echo "FINAL OUTPUT"
           echo "======================================"
 
           ls \
@@ -908,7 +1006,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: super-rr-final-max-fps-failed
+          name: super-rr-final-max-fps-v10-failed
           path: |
             Butterscotch/src/ios/main.c
             Butterscotch/src/vm_builtins.c
