@@ -1,4 +1,4 @@
-name: Super Redux-Redux iOS MAX FPS v7 FIXED
+name: Super Redux-Redux iOS MAX FPS v7 FIXED 2
 
 on:
   workflow_dispatch:
@@ -14,7 +14,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
 
       # ==========================================================
       # DOWNLOAD GAME
@@ -74,7 +73,6 @@ jobs:
 
           du -sh "$GAME_DIR"
 
-
       # ==========================================================
       # BUTTERSCOTCH
       # ==========================================================
@@ -95,7 +93,6 @@ jobs:
           echo "Butterscotch:"
           git rev-parse HEAD
 
-
       # ==========================================================
       # PERFORMANCE PATCHES
       # ==========================================================
@@ -111,7 +108,6 @@ jobs:
 
           git remote add upstream \
             https://github.com/ButterscotchRunner/Butterscotch.git
-
 
           echo
           echo "======================================"
@@ -168,7 +164,6 @@ jobs:
             echo "GL patch unavailable."
             git reset --hard "$GL_BEFORE"
           fi
-
 
           echo
           echo "======================================"
@@ -230,7 +225,6 @@ jobs:
 
           git log --oneline -10
 
-
       # ==========================================================
       # COMPILER
       # ==========================================================
@@ -259,7 +253,6 @@ jobs:
           echo "IOS_CC=$RUNNER_TEMP/ios-clang" \
             >> "$GITHUB_ENV"
 
-
       # ==========================================================
       # APP INFO
       # ==========================================================
@@ -287,7 +280,6 @@ jobs:
             -c "Set :MinimumOSVersion 12.0" \
             "$PLIST"
 
-
       # ==========================================================
       # BUNDLE GAME
       # ==========================================================
@@ -313,7 +305,6 @@ jobs:
 
           echo "Files:"
           find "$BUNDLED" -type f | wc -l
-
 
       # ==========================================================
       # RENDERING
@@ -703,9 +694,8 @@ jobs:
           print("Rendering patch complete.")
           PY
 
-
       # ==========================================================
-      # MAIN TOUCH CONTROLS
+      # GAMEPLAY CONTROLS
       # ==========================================================
 
       - name: Patch Redux gameplay controls
@@ -1292,10 +1282,8 @@ jobs:
           print("Gameplay controls complete.")
           PY
 
-
       # ==========================================================
-      # R + LOOK + LOCK
-      # FIXED DEALLOC PATCH
+      # R / LOOK / LOCK
       # ==========================================================
 
       - name: Add R LOOK LOCK
@@ -1310,11 +1298,6 @@ jobs:
 
           p = Path("Butterscotch/src/ios/main.c")
           s = p.read_text()
-
-
-          # ------------------------------------------------------
-          # HIGH RES OFF
-          # ------------------------------------------------------
 
           old_highres = '''static bool bsLoadHighResEnabled(void) {
               return [[NSUserDefaults standardUserDefaults] boolForKey:BS_HIGH_RES_DEFAULTS_KEY];
@@ -1331,11 +1314,6 @@ jobs:
                   1
               )
 
-
-          # ------------------------------------------------------
-          # LOOK
-          # ------------------------------------------------------
-
           old_ff_type = (
               'BSToggleKeyButton *_ffButton;'
           )
@@ -1350,7 +1328,6 @@ jobs:
               'BSKeyButton       *_ffButton;',
               1
           )
-
 
           old_ff_init = '''        _ffButton = [[BSToggleKeyButton alloc] initWithFrame:CGRectZero key:VK_TAB label:@">>" font:16.0f hitExpansion:6.0f];'''
 
@@ -1372,11 +1349,6 @@ jobs:
               1
           )
 
-
-          # ------------------------------------------------------
-          # FIELDS
-          # ------------------------------------------------------
-
           aim_field = '''    UITouch          *_aimTouch;'''
 
           new_fields = '''    UITouch          *_aimTouch;
@@ -1393,11 +1365,6 @@ jobs:
               new_fields,
               1
           )
-
-
-          # ------------------------------------------------------
-          # INIT R + LOCK
-          # ------------------------------------------------------
 
           aim_init = '''        _aimTouch = nil;'''
 
@@ -1428,11 +1395,6 @@ jobs:
               new_init,
               1
           )
-
-
-          # ------------------------------------------------------
-          # LAYOUT
-          # ------------------------------------------------------
 
           layout_line = '''    _ffButton.frame = layout.ffFrame;'''
 
@@ -1470,11 +1432,6 @@ jobs:
               1
           )
 
-
-          # ------------------------------------------------------
-          # DRAW
-          # ------------------------------------------------------
-
           draw_line = '''    [_ffButton drawInContext:ctx];'''
 
           new_draw = '''    [_ffButton drawInContext:ctx];
@@ -1491,11 +1448,6 @@ jobs:
               new_draw,
               1
           )
-
-
-          # ------------------------------------------------------
-          # TOUCH START
-          # ------------------------------------------------------
 
           begin_marker = '''        if ([_ffButton handleTouchBegan:touch point:p]) continue;
                   if ([_dpad handleTouchBegan:touch point:p]) continue;'''
@@ -1516,11 +1468,6 @@ jobs:
               1
           )
 
-
-          # ------------------------------------------------------
-          # TOUCH END
-          # ------------------------------------------------------
-
           end_marker = '''        if ([_ffButton handleTouchEnded:touch]) continue;'''
 
           end_new = '''        if ([_ffButton handleTouchEnded:touch]) continue;
@@ -1538,14 +1485,7 @@ jobs:
               1
           )
 
-
-          # ------------------------------------------------------
-          # DEALLOC
-          #
-          # FIX:
-          # Do NOT search for the old action-button block because
-          # the previous patch has already modified it.
-          # ------------------------------------------------------
+          # FIXED DEALLOC
 
           dealloc_marker = '''    [_ffButton release];'''
 
@@ -1564,15 +1504,10 @@ jobs:
               1
           )
 
-
           p.write_text(s)
 
-          print("======================================")
-          print("R / LOOK / LOCK COMPLETE")
-          print("FIXED DEALLOC PATCH")
-          print("======================================")
+          print("R / LOOK / LOCK complete.")
           PY
-
 
       # ==========================================================
       # PAUSE + FPS + RIGHT LOOK
@@ -1590,11 +1525,6 @@ jobs:
 
           p = Path("Butterscotch/src/ios/main.c")
           s = p.read_text()
-
-
-          # ------------------------------------------------------
-          # FPS STORAGE
-          # ------------------------------------------------------
 
           mouse_marker = '''static _Atomic double
               bsTouchMouseY = 240.0;'''
@@ -1621,11 +1551,6 @@ jobs:
               fps_storage,
               1
           )
-
-
-          # ------------------------------------------------------
-          # COUNT FRAMES
-          # ------------------------------------------------------
 
           swap_marker = '''void platformSwapBuffers(void) {
           #ifdef ENABLE_SW_RENDERER'''
@@ -1679,11 +1604,6 @@ jobs:
               1
           )
 
-
-          # ------------------------------------------------------
-          # LOOK FRAME
-          # ------------------------------------------------------
-
           layout_struct = '''    CGRect ffFrame;
               bool   portrait;'''
 
@@ -1701,7 +1621,6 @@ jobs:
               layout_struct_new,
               1
           )
-
 
           portrait_layout = '''        layout.buttonsFrame = CGRectMake(screen.width - 16 - 150, stripY + 30, 150, 50);'''
 
@@ -1729,7 +1648,6 @@ jobs:
               1
           )
 
-
           landscape_layout = '''        layout.buttonsFrame = CGRectMake(screen.width - notchInset - 10 - 170, (screen.height - 130) / 2.0f + 60, 170, 60);'''
 
           landscape_new = '''        layout.buttonsFrame = CGRectMake(screen.width - notchInset - 10 - 170, (screen.height - 130) / 2.0f + 60, 170, 60);
@@ -1755,11 +1673,6 @@ jobs:
               landscape_new,
               1
           )
-
-
-          # ------------------------------------------------------
-          # LOOK PAD INTERFACE
-          # ------------------------------------------------------
 
           overlay_interface_marker = '''@interface BSTouchOverlay : UIView {'''
 
@@ -1805,11 +1718,6 @@ jobs:
               1
           )
 
-
-          # ------------------------------------------------------
-          # FIELDS
-          # ------------------------------------------------------
-
           fields_marker = '''    BSActionButton   *_lockButton;'''
 
           fields_new = '''    BSActionButton   *_lockButton;
@@ -1828,11 +1736,6 @@ jobs:
               fields_new,
               1
           )
-
-
-          # ------------------------------------------------------
-          # LAYOUT
-          # ------------------------------------------------------
 
           lock_layout = '''    _lockButton.frame =
                   CGRectMake(
@@ -1882,11 +1785,6 @@ jobs:
               controls_layout,
               1
           )
-
-
-          # ------------------------------------------------------
-          # INIT
-          # ------------------------------------------------------
 
           aim_init = '''    _aimTouch = nil;'''
 
@@ -1952,11 +1850,6 @@ jobs:
               1
           )
 
-
-          # ------------------------------------------------------
-          # FPS LABEL UPDATE
-          # ------------------------------------------------------
-
           drawrect_marker = '''- (void)drawRect:(CGRect)rect {'''
 
           fps_method = r'''
@@ -1990,11 +1883,6 @@ jobs:
               1
           )
 
-
-          # ------------------------------------------------------
-          # DRAW
-          # ------------------------------------------------------
-
           draw_marker = '''    [_lockButton drawInContext:ctx];'''
 
           draw_new = '''    [_lockButton drawInContext:ctx];
@@ -2011,11 +1899,6 @@ jobs:
               draw_new,
               1
           )
-
-
-          # ------------------------------------------------------
-          # TOUCH BEGIN
-          # ------------------------------------------------------
 
           begin_marker = '''        if ([_lockButton handleTouchBegan:touch point:p]) continue;
                   if ([_dpad handleTouchBegan:touch point:p]) continue;'''
@@ -2035,7 +1918,7 @@ jobs:
 
           if begin_marker not in s:
               raise SystemExit(
-                  "ERROR: v5 touch begin marker missing"
+                  "ERROR: touch begin marker missing"
               )
 
           s = s.replace(
@@ -2043,11 +1926,6 @@ jobs:
               begin_new,
               1
           )
-
-
-          # ------------------------------------------------------
-          # TOUCH MOVE
-          # ------------------------------------------------------
 
           move_marker = '''        if ([_dpad
                           handleTouchMoved:touch
@@ -2088,11 +1966,6 @@ jobs:
               1
           )
 
-
-          # ------------------------------------------------------
-          # TOUCH END
-          # ------------------------------------------------------
-
           end_marker = '''        if ([_lockButton handleTouchEnded:touch]) continue;'''
 
           end_new = '''        if ([_lockButton handleTouchEnded:touch]) continue;
@@ -2107,7 +1980,7 @@ jobs:
 
           if end_marker not in s:
               raise SystemExit(
-                  "ERROR: v5 touch end marker missing"
+                  "ERROR: touch end marker missing"
               )
 
           s = s.replace(
@@ -2115,11 +1988,6 @@ jobs:
               end_new,
               1
           )
-
-
-          # ------------------------------------------------------
-          # DEALLOC
-          # ------------------------------------------------------
 
           dealloc_marker = '''    [_restartButton release];
               [_lockButton release];'''
@@ -2149,11 +2017,6 @@ jobs:
               dealloc_new,
               1
           )
-
-
-          # ------------------------------------------------------
-          # LOOK PAD
-          # ------------------------------------------------------
 
           dpad_impl_marker = '''@implementation BSDpad'''
 
@@ -2212,8 +2075,7 @@ jobs:
                   ny = 0.0f;
 
               CGRect screen =
-                  [[UIScreen mainScreen]
-                      bounds];
+                  [[UIScreen mainScreen] bounds];
 
               double cx =
                   screen.size.width * 0.5;
@@ -2445,11 +2307,8 @@ jobs:
 
           p.write_text(s)
 
-          print("======================================")
-          print("PAUSE / FPS / RIGHT LOOK COMPLETE")
-          print("======================================")
+          print("PAUSE / FPS / RIGHT LOOK complete.")
           PY
-
 
       # ==========================================================
       # MAX FPS RUNTIME
@@ -2468,11 +2327,6 @@ jobs:
           p = Path("Butterscotch/src/ios/main.c")
           s = p.read_text()
 
-
-          # ------------------------------------------------------
-          # GAME THREAD PRIORITY
-          # ------------------------------------------------------
-
           old_thread = '''- (void)gameThread {
               NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];'''
 
@@ -2489,7 +2343,6 @@ jobs:
               }'''
 
           if old_thread in s:
-
               s = s.replace(
                   old_thread,
                   new_thread,
@@ -2497,29 +2350,13 @@ jobs:
               )
 
               print("Game thread QoS enabled.")
-
           else:
-
-              print(
-                  "Game thread marker changed - skipping QoS."
-              )
-
-
-          # ------------------------------------------------------
-          # LOWER INTERNAL FRAMEBUFFER
-          #
-          # 72% linear = ~52% number of pixels.
-          # ------------------------------------------------------
+              print("Game thread marker changed - skipping QoS.")
 
           old_scale = '''    targetScale += 0.0005f;
               if (targetScale > nativeScale) targetScale = nativeScale;'''
 
-          new_scale = '''    /*
-               * Super R-R MAX FPS
-               *
-               * Reduce internal framebuffer workload.
-               */
-              targetScale *= 0.72f;
+          new_scale = '''    targetScale *= 0.72f;
 
               if (targetScale < 0.35f)
                   targetScale = 0.35f;
@@ -2540,19 +2377,13 @@ jobs:
               1
           )
 
-
           p.write_text(s)
 
-          print("======================================")
-          print("MAX FPS RUNTIME ENABLED")
-          print("Framebuffer: 72% scale")
-          print("High resolution: OFF")
-          print("======================================")
+          print("MAX FPS runtime enabled.")
           PY
 
-
       # ==========================================================
-      # GAME INSTALLER
+      # AUTOMATIC INSTALLER
       # ==========================================================
 
       - name: Add automatic game installer
@@ -2659,9 +2490,78 @@ jobs:
           print("Bundled installer complete.")
           PY
 
+      # ==========================================================
+      # NEW FIX:
+      # IOS ALREADY HAS fabsf/sqrtf/etc.
+      # ==========================================================
+
+      - name: Fix iOS math compatibility
+        shell: bash
+        run: |
+          set -e
+
+          cd "$GITHUB_WORKSPACE/Butterscotch"
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          p = Path("src/math_compat.h")
+
+          if not p.exists():
+              raise SystemExit(
+                  "ERROR: src/math_compat.h missing"
+              )
+
+          s = p.read_text()
+
+          marker = '#include "real_type.h"'
+
+          patch = '''#include "real_type.h"
+
+          /*
+           * iOS already provides these C99 math functions.
+           * Do not compile Butterscotch fallback versions.
+           */
+          #if defined(__APPLE__)
+          #undef NO_LROUND
+          #undef NO_SQRTF
+          #undef NO_FABSF
+          #undef NO_FMODF
+          #undef NO_SINF
+          #undef NO_COSF
+          #undef NO_FLOORF
+          #undef NO_ROUNDF
+          #endif'''
+
+          if marker not in s:
+              raise SystemExit(
+                  "ERROR: math compatibility marker missing"
+              )
+
+          s = s.replace(
+              marker,
+              patch,
+              1
+          )
+
+          p.write_text(s)
+
+          print("")
+          print("======================================")
+          print("IOS MATH COMPATIBILITY FIXED")
+          print("======================================")
+          print("NO_FABSF disabled")
+          print("NO_SQRTF disabled")
+          print("NO_FMODF disabled")
+          print("NO_SINF disabled")
+          print("NO_COSF disabled")
+          print("NO_FLOORF disabled")
+          print("NO_ROUNDF disabled")
+          print("======================================")
+          PY
 
       # ==========================================================
-      # PATCH CHECK
+      # VERIFY PATCHES
       # ==========================================================
 
       - name: Verify source patches
@@ -2685,8 +2585,14 @@ jobs:
           grep -n 'targetScale \*= 0.72f' "$FILE"
 
           echo
-          echo "All required source patches found."
+          echo "Math compatibility:"
 
+          grep -n 'NO_FABSF' \
+            "$GITHUB_WORKSPACE/Butterscotch/src/math_compat.h" \
+            | head
+
+          echo
+          echo "All required source patches found."
 
       # ==========================================================
       # CLEAN
@@ -2699,12 +2605,11 @@ jobs:
 
           make distclean || true
 
-
       # ==========================================================
       # BUILD
       # ==========================================================
 
-      - name: Build Super Redux-Redux MAX FPS v7 FIXED
+      - name: Build Super Redux-Redux MAX FPS v7 FIXED 2
         shell: bash
         run: |
           set +e
@@ -2721,7 +2626,7 @@ jobs:
 
           echo
           echo "======================================"
-          echo "SUPER R-R MAX FPS v7 FIXED"
+          echo "SUPER R-R MAX FPS v7 FIXED 2"
           echo "======================================"
           echo
           echo "ARM64"
@@ -2735,6 +2640,7 @@ jobs:
           echo "VM logs OFF"
           echo "High resolution OFF"
           echo "Framebuffer 72%"
+          echo "iOS math compatibility FIXED"
           echo
 
           make \
@@ -2751,7 +2657,7 @@ jobs:
             DISABLE_VM_TRACING=1 \
             BUTTERSCOTCH_COMMIT_HASH="$HASH" \
             BUTTERSCOTCH_COMMIT_DATE="$DATE" \
-            2>&1 | tee "$GITHUB_WORKSPACE/max-fps-v7-fixed.log"
+            2>&1 | tee "$GITHUB_WORKSPACE/max-fps-v7-fixed2.log"
 
           STATUS=${PIPESTATUS[0]}
 
@@ -2764,8 +2670,8 @@ jobs:
 
             grep -n -E \
               "error:|fatal error:|ERROR:" \
-              "$GITHUB_WORKSPACE/max-fps-v7-fixed.log" \
-              | tail -150 \
+              "$GITHUB_WORKSPACE/max-fps-v7-fixed2.log" \
+              | tail -180 \
               || true
 
             echo "======================================"
@@ -2781,7 +2687,6 @@ jobs:
             -type f \
             -print
 
-
       # ==========================================================
       # VERIFY IPA
       # ==========================================================
@@ -2792,6 +2697,7 @@ jobs:
           set -e
 
           IPA="$GITHUB_WORKSPACE/Butterscotch/build/butterscotch.ipa"
+
           BIN="$GITHUB_WORKSPACE/Butterscotch/build/butterscotch"
 
           test -f "$IPA"
@@ -2815,12 +2721,11 @@ jobs:
             | grep -i \
               "BundledGame/data.win"
 
-
       # ==========================================================
       # OUTPUT
       # ==========================================================
 
-      - name: Prepare MAX FPS v7 FIXED
+      - name: Prepare MAX FPS v7 FIXED 2
         shell: bash
         run: |
           set -e
@@ -2829,12 +2734,12 @@ jobs:
 
           cp \
             "$GITHUB_WORKSPACE/Butterscotch/build/butterscotch.ipa" \
-            "$GITHUB_WORKSPACE/output/Super-Redux-Redux-iOS-v7-MAX-FPS-FIXED.ipa"
+            "$GITHUB_WORKSPACE/output/Super-Redux-Redux-iOS-v7-MAX-FPS-FIXED2.ipa"
 
           cat > "$GITHUB_WORKSPACE/output/README.txt" <<'EOF'
           SUPER REDUX-REDUX iOS
-          MAX FPS v7 FIXED
-          ====================
+          MAX FPS v7 FIXED 2
+          ==================
 
           CONTROLS
 
@@ -2874,45 +2779,41 @@ jobs:
           ARM64
           O3
           Thin LTO
-          NDEBUG
           frame pointer OFF
           profilers OFF
           tracing OFF
           logs OFF
           high-resolution mode OFF
-          72% internal framebuffer
+          internal framebuffer 72%
           GL optimization attempted
           VM optimization attempted
           high-priority game thread
+          iOS math compatibility fix
 
-          Main goal:
-          highest possible FPS.
+          TEST FIRST:
 
-          Test:
-          1. Mask selection
-          2. Rooms with enemies
-          3. Large fights
+          - mask selection
+          - rooms with enemies
+          - large fights
 
           IPA is unsigned/ad-hoc.
           EOF
 
           ls -lh "$GITHUB_WORKSPACE/output"
 
-
       # ==========================================================
       # UPLOAD
       # ==========================================================
 
-      - name: Upload MAX FPS v7 FIXED IPA
+      - name: Upload MAX FPS v7 FIXED 2 IPA
         uses: actions/upload-artifact@v4
         with:
-          name: super-redux-redux-ios-v7-MAX-FPS-FIXED
+          name: super-redux-redux-ios-v7-MAX-FPS-FIXED2
           path: |
-            output/Super-Redux-Redux-iOS-v7-MAX-FPS-FIXED.ipa
+            output/Super-Redux-Redux-iOS-v7-MAX-FPS-FIXED2.ipa
             output/README.txt
           if-no-files-found: error
           retention-days: 7
-
 
       # ==========================================================
       # DEBUG
@@ -2922,11 +2823,12 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: redux-ios-v7-max-fps-fixed-failed
+          name: redux-ios-v7-max-fps-fixed2-failed
           path: |
             Butterscotch/src/ios/main.c
             Butterscotch/src/vm_builtins.c
+            Butterscotch/src/math_compat.h
             Butterscotch/compat/config.mk
-            max-fps-v7-fixed.log
+            max-fps-v7-fixed2.log
           if-no-files-found: ignore
           retention-days: 7
