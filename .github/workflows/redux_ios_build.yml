@@ -1,4 +1,4 @@
-name: Super Redux-Redux iOS FINAL PERFORMANCE v8
+name: Super Redux-Redux iOS FINAL PERFORMANCE v8 FIXED
 
 on:
   workflow_dispatch:
@@ -76,7 +76,7 @@ jobs:
           du -sh "$GAME_DIR"
 
       # ==========================================================
-      # BUTTERSCOTCH IOS
+      # BUTTERSCOTCH
       # ==========================================================
 
       - name: Download Butterscotch iOS
@@ -97,7 +97,7 @@ jobs:
           git rev-parse HEAD
 
       # ==========================================================
-      # GL + VM PERFORMANCE
+      # PERFORMANCE PATCHES
       # ==========================================================
 
       - name: Apply GL and VM performance patches
@@ -147,9 +147,7 @@ jobs:
                 echo "GL patch conflict."
 
                 git cherry-pick --abort || true
-
-                git reset \
-                  --hard "$GL_BEFORE"
+                git reset --hard "$GL_BEFORE"
 
                 GL_OK=0
                 break
@@ -166,10 +164,9 @@ jobs:
           else
 
             echo "Could not fetch GL patch."
-
-            git reset \
-              --hard "$GL_BEFORE"
+            git reset --hard "$GL_BEFORE"
           fi
+
 
           echo
           echo "======================================"
@@ -205,9 +202,7 @@ jobs:
                 echo "VM patch conflict."
 
                 git cherry-pick --abort || true
-
-                git reset \
-                  --hard "$VM_BEFORE"
+                git reset --hard "$VM_BEFORE"
 
                 VM_OK=0
                 break
@@ -224,9 +219,7 @@ jobs:
           else
 
             echo "Could not fetch VM patch."
-
-            git reset \
-              --hard "$VM_BEFORE"
+            git reset --hard "$VM_BEFORE"
           fi
 
           echo
@@ -237,7 +230,7 @@ jobs:
             -10
 
       # ==========================================================
-      # IPHONE COMPILER
+      # COMPILER
       # ==========================================================
 
       - name: Prepare A14 iPhone compiler
@@ -245,7 +238,6 @@ jobs:
         run: |
           set -e
 
-          echo "===== XCODE ====="
           xcodebuild -version
 
           SDK="$(xcrun \
@@ -258,7 +250,6 @@ jobs:
 
           cat > "$RUNNER_TEMP/ios-clang" <<EOF
           #!/bin/bash
-
           exec "$CLANG" \
             -target arm64-apple-ios12.0 \
             -arch arm64 \
@@ -266,19 +257,14 @@ jobs:
             "\$@"
           EOF
 
-          chmod +x \
-            "$RUNNER_TEMP/ios-clang"
+          chmod +x "$RUNNER_TEMP/ios-clang"
 
-          echo \
-            "IOS_CC=$RUNNER_TEMP/ios-clang" \
+          echo "IOS_CC=$RUNNER_TEMP/ios-clang" \
             >> "$GITHUB_ENV"
 
           echo
-          echo "===== A14 CPU CHECK ====="
-
-          "$RUNNER_TEMP/ios-clang" \
-            -mcpu=apple-a14 \
-            --version
+          echo "Compiler:"
+          "$RUNNER_TEMP/ios-clang" --version
 
       # ==========================================================
       # APP INFO
@@ -319,15 +305,13 @@ jobs:
           BUNDLED="$GITHUB_WORKSPACE/Butterscotch/artifacts/ios/assets/BundledGame"
 
           rm -rf "$BUNDLED"
-
           mkdir -p "$BUNDLED"
 
           rsync -a \
             "$GAME_DIR/" \
             "$BUNDLED/"
 
-          test -f \
-            "$BUNDLED/data.win"
+          test -f "$BUNDLED/data.win"
 
           echo
           echo "Bundled game:"
@@ -342,7 +326,7 @@ jobs:
             | wc -l
 
       # ==========================================================
-      # REDUX RENDERING BUILTINS
+      # REDUX RENDERING
       # ==========================================================
 
       - name: Patch Redux rendering
@@ -366,21 +350,15 @@ jobs:
               )
 
           extra = r'''
-          /*
-           * Super Redux-Redux compatibility.
-           */
-
           static RValue builtin_d3d_set_projection_ortho(
               VMContext* ctx,
               RValue* args,
               int32_t argCount
           ) {
-
               if (argCount < 5)
                   return RValue_makeUndefined();
 
-              Runner* runner =
-                  ctx->runner;
+              Runner* runner = ctx->runner;
 
               if (runner == nullptr ||
                   runner->renderer == nullptr)
@@ -408,9 +386,7 @@ jobs:
               Matrix4f view;
               Matrix4f projection;
 
-              Matrix4f_identity(
-                  &view
-              );
+              Matrix4f_identity(&view);
 
               Matrix4f_viewProjection(
                   &projection,
@@ -421,14 +397,11 @@ jobs:
                   angle
               );
 
-              runner
-                  ->renderer
-                  ->vtable
-                  ->applyProjection(
-                      runner->renderer,
-                      &view,
-                      &projection
-                  );
+              runner->renderer->vtable->applyProjection(
+                  runner->renderer,
+                  &view,
+                  &projection
+              );
 
               return RValue_makeUndefined();
           }
@@ -439,7 +412,6 @@ jobs:
               RValue* args,
               int32_t argCount
           ) {
-
               if (argCount < 16)
                   return RValue_makeUndefined();
 
@@ -450,14 +422,10 @@ jobs:
                   ctx->dataWin;
 
               int32_t roomId =
-                  RValue_toInt32(
-                      args[0]
-                  );
+                  RValue_toInt32(args[0]);
 
               int32_t viewId =
-                  RValue_toInt32(
-                      args[1]
-                  );
+                  RValue_toInt32(args[1]);
 
               if (roomId < 0 ||
                   (uint32_t)roomId >=
@@ -472,17 +440,13 @@ jobs:
               );
 
               Room* room =
-                  &dw->room.rooms[
-                      roomId
-                  ];
+                  &dw->room.rooms[roomId];
 
               if (room->views == nullptr)
                   return RValue_makeUndefined();
 
               RoomView* v =
-                  &room->views[
-                      viewId
-                  ];
+                  &room->views[viewId];
 
               v->enabled =
                   RValue_toBool(args[2]);
@@ -512,31 +476,19 @@ jobs:
                   RValue_toInt32(args[10]);
 
               v->borderX =
-                  (uint32_t)
-                  RValue_toInt32(
-                      args[11]
-                  );
+                  (uint32_t)RValue_toInt32(args[11]);
 
               v->borderY =
-                  (uint32_t)
-                  RValue_toInt32(
-                      args[12]
-                  );
+                  (uint32_t)RValue_toInt32(args[12]);
 
               v->speedX =
-                  RValue_toInt32(
-                      args[13]
-                  );
+                  RValue_toInt32(args[13]);
 
               v->speedY =
-                  RValue_toInt32(
-                      args[14]
-                  );
+                  RValue_toInt32(args[14]);
 
               v->objectId =
-                  RValue_toInt32(
-                      args[15]
-                  );
+                  RValue_toInt32(args[15]);
 
               if (v->enabled)
                   room->flags |= 1;
@@ -549,9 +501,7 @@ jobs:
                       (room->flags & 1) != 0;
 
                   RuntimeView* rv =
-                      &runner->views[
-                          viewId
-                      ];
+                      &runner->views[viewId];
 
                   rv->enabled =
                       v->enabled;
@@ -572,10 +522,9 @@ jobs:
                       viewId;
 
                   GMLCamera* camera =
-                      &runner
-                          ->defaultCameras[
-                              viewId
-                          ];
+                      &runner->defaultCameras[
+                          viewId
+                      ];
 
                   camera->allocated =
                       true;
@@ -622,15 +571,11 @@ jobs:
 
           s = s.replace(
               room_marker,
-              extra +
-              "\n" +
-              room_marker,
+              extra + "\n" + room_marker,
               1
           )
 
-          display_marker = (
-              "// Display stubs"
-          )
+          display_marker = "// Display stubs"
 
           if display_marker not in s:
               raise SystemExit(
@@ -643,7 +588,6 @@ jobs:
               MAYBE_UNUSED RValue* args,
               MAYBE_UNUSED int32_t argCount
           ) {
-
               Runner* runner =
                   ctx->runner;
 
@@ -654,9 +598,7 @@ jobs:
                   );
 
               return RValue_makeReal(
-                  runner
-                      ->mouse
-                      ->normalizedX *
+                  runner->mouse->normalizedX *
                   640.0
               );
           }
@@ -667,7 +609,6 @@ jobs:
               MAYBE_UNUSED RValue* args,
               MAYBE_UNUSED int32_t argCount
           ) {
-
               Runner* runner =
                   ctx->runner;
 
@@ -678,9 +619,7 @@ jobs:
                   );
 
               return RValue_makeReal(
-                  runner
-                      ->mouse
-                      ->normalizedY *
+                  runner->mouse->normalizedY *
                   480.0
               );
           }
@@ -691,7 +630,6 @@ jobs:
               MAYBE_UNUSED RValue* args,
               MAYBE_UNUSED int32_t argCount
           ) {
-
               Runner* runner =
                   ctx->runner;
 
@@ -702,9 +640,7 @@ jobs:
                   );
 
               return RValue_makeReal(
-                  runner
-                      ->mouse
-                      ->screenX
+                  runner->mouse->screenX
               );
           }
 
@@ -714,7 +650,6 @@ jobs:
               MAYBE_UNUSED RValue* args,
               MAYBE_UNUSED int32_t argCount
           ) {
-
               Runner* runner =
                   ctx->runner;
 
@@ -725,9 +660,7 @@ jobs:
                   );
 
               return RValue_makeReal(
-                  runner
-                      ->mouse
-                      ->screenY
+                  runner->mouse->screenY
               );
           }
 
@@ -737,7 +670,6 @@ jobs:
               MAYBE_UNUSED RValue* args,
               MAYBE_UNUSED int32_t argCount
           ) {
-
               return RValue_makeUndefined();
           }
 
@@ -745,9 +677,7 @@ jobs:
 
           s = s.replace(
               display_marker,
-              mouse_code +
-              "\n" +
-              display_marker,
+              mouse_code + "\n" + display_marker,
               1
           )
 
@@ -764,8 +694,7 @@ jobs:
 
           s = s.replace(
               matrix_registration,
-              matrix_registration +
-              '\n'
+              matrix_registration + '\n'
               '    VM_registerBuiltin(ctx, '
               '"d3d_set_projection_ortho", '
               'builtin_d3d_set_projection_ortho);',
@@ -785,8 +714,7 @@ jobs:
 
           s = s.replace(
               room_registration,
-              room_registration +
-              '\n'
+              room_registration + '\n'
               '    VM_registerBuiltin(ctx, '
               '"room_set_view", '
               'builtin_room_set_view);',
@@ -806,8 +734,7 @@ jobs:
 
           s = s.replace(
               display_registration,
-              display_registration +
-              '\n'
+              display_registration + '\n'
               '    VM_registerBuiltin(ctx, '
               '"display_mouse_get_x", '
               'builtin_display_mouse_get_x);\n'
@@ -834,7 +761,7 @@ jobs:
           PY
 
       # ==========================================================
-      # MOBILE MOUSE + ACTION BUTTONS
+      # MOBILE CONTROLS
       # ==========================================================
 
       - name: Patch Redux gameplay controls
@@ -891,7 +818,6 @@ jobs:
               int32_t button,
               bool isDown
           ) {
-
               int head =
                   atomic_load(
                       &bsMouseQueueHead
@@ -907,14 +833,10 @@ jobs:
                   ))
                   return;
 
-              bsMouseQueue[
-                  head
-              ].button =
+              bsMouseQueue[head].button =
                   button;
 
-              bsMouseQueue[
-                  head
-              ].isDown =
+              bsMouseQueue[head].isDown =
                   isDown;
 
               atomic_store(
@@ -924,9 +846,7 @@ jobs:
           }
 
 
-          static void bsDrainMouseEvents(
-              void
-          ) {
+          static void bsDrainMouseEvents(void) {
 
               for (;;) {
 
@@ -942,9 +862,7 @@ jobs:
                       break;
 
                   BSMouseEvent ev =
-                      bsMouseQueue[
-                          tail
-                      ];
+                      bsMouseQueue[tail];
 
                   atomic_store(
                       &bsMouseQueueTail,
@@ -977,8 +895,7 @@ jobs:
 
           s = s.replace(
               marker,
-              mouse_queue +
-              marker,
+              mouse_queue + marker,
               1
           )
 
@@ -1009,13 +926,6 @@ jobs:
               bsDrainKeyEvents();'''
 
           new_events = '''bool platformHandleEvents(void) {
-
-              /*
-               * Touch-only Super R-R build.
-               *
-               * GCController polling previously ran every frame,
-               * even when no physical controller was being used.
-               */
               bsDrainKeyEvents();
               bsDrainMouseEvents();'''
 
@@ -1042,21 +952,16 @@ jobs:
               CGPoint p,
               CGRect gameFrame
           ) {
-
-              if (gameFrame.size.width <=
-                      0.0f ||
-                  gameFrame.size.height <=
-                      0.0f)
+              if (gameFrame.size.width <= 0.0f ||
+                  gameFrame.size.height <= 0.0f)
                   return;
 
               CGFloat nx =
-                  (p.x -
-                   gameFrame.origin.x) /
+                  (p.x - gameFrame.origin.x) /
                   gameFrame.size.width;
 
               CGFloat ny =
-                  (p.y -
-                   gameFrame.origin.y) /
+                  (p.y - gameFrame.origin.y) /
                   gameFrame.size.height;
 
               if (nx < 0.0f)
@@ -1096,8 +1001,7 @@ jobs:
 
           s = s.replace(
               action_marker,
-              touch_helper +
-              action_marker,
+              touch_helper + action_marker,
               1
           )
 
@@ -1131,7 +1035,7 @@ jobs:
 
           if interface_marker not in s:
               raise SystemExit(
-                  "ERROR: BSQuitButton marker missing"
+                  "ERROR: interface marker missing"
               )
 
           s = s.replace(
@@ -1539,7 +1443,7 @@ jobs:
           p.write_text(s)
 
           print(
-              "Touch mouse/actions complete."
+              "Touch controls complete."
           )
           PY
 
@@ -1572,7 +1476,6 @@ jobs:
           }'''
 
           if old_highres in s:
-
               s = s.replace(
                   old_highres,
                   new_highres,
@@ -1797,7 +1700,8 @@ jobs:
           PY
 
       # ==========================================================
-      # PAUSE + FPS + RIGHT LOOK STICK
+      # PAUSE + FPS + RIGHT LOOK
+      # FIXED LOCK LAYOUT
       # ==========================================================
 
       - name: Add PAUSE FPS and right LOOK
@@ -2045,9 +1949,12 @@ jobs:
               1
           )
 
+          # THIS IS THE FIXED PART
+
           lock_layout = '''    _lockButton.frame =
                   CGRectMake(
-                      rightEdge - 94.0f,
+                      rightEdge -
+                          94.0f,
                       BS_QUIT_BUTTON_MARGIN,
                       46.0f,
                       34.0f
@@ -2055,7 +1962,8 @@ jobs:
 
           controls_layout = '''    _lockButton.frame =
                   CGRectMake(
-                      rightEdge - 94.0f,
+                      rightEdge -
+                          94.0f,
                       BS_QUIT_BUTTON_MARGIN,
                       46.0f,
                       34.0f
@@ -2593,10 +2501,8 @@ jobs:
                   CGRectMake(
                       cx - baseR,
                       cy - baseR,
-                      baseR *
-                          2.0f,
-                      baseR *
-                          2.0f
+                      baseR * 2.0f,
+                      baseR * 2.0f
                   );
 
               CGContextSetRGBFillColor(
@@ -2632,10 +2538,8 @@ jobs:
                           thumbR,
                       thumbY -
                           thumbR,
-                      thumbR *
-                          2.0f,
-                      thumbR *
-                          2.0f
+                      thumbR * 2.0f,
+                      thumbR * 2.0f
                   );
 
               CGContextSetRGBFillColor(
@@ -2722,11 +2626,7 @@ jobs:
           PY
 
       # ==========================================================
-      # IMPORTANT v8 FIX
-      #
-      # FORCE MODERN OPENGL ES
-      #
-      # Previous iOS builds could default to SOFTWARE renderer.
+      # FORCE MODERN GL
       # ==========================================================
 
       - name: FORCE Modern GL renderer
@@ -2738,6 +2638,7 @@ jobs:
 
           python3 <<'PY'
           from pathlib import Path
+          import re
 
           p = Path(
               "Butterscotch/src/ios/main.c"
@@ -2745,49 +2646,41 @@ jobs:
 
           s = p.read_text()
 
-          old = '''static int bsLoadRendererPreference(void) {
-              NSInteger v = [[NSUserDefaults standardUserDefaults] integerForKey:BS_RENDERER_DEFAULTS_KEY];
-              if (v != BS_RENDERER_SOFTWARE && v != BS_RENDERER_MODERN_GL)
-                  return BS_RENDERER_SOFTWARE;
-              return (int)v;
-          }'''
+          pattern = re.compile(
+              r'static int bsLoadRendererPreference\(void\) \{.*?\n\}',
+              re.S
+          )
 
-          new = '''static int bsLoadRendererPreference(void) {
+          replacement = '''static int bsLoadRendererPreference(void) {
 
               /*
                * Super R-R v8:
-               *
-               * ALWAYS use Modern OpenGL ES.
-               *
-               * The stock iOS frontend defaults to software
-               * rendering when no renderer preference exists.
-               * That is far too slow for Super Redux-Redux.
+               * always prefer Modern GL.
                */
               return BS_RENDERER_MODERN_GL;
           }'''
 
-          if old not in s:
+          s2, count = pattern.subn(
+              replacement,
+              s,
+              count=1
+          )
+
+          if count != 1:
               raise SystemExit(
                   "ERROR: renderer preference function missing"
               )
 
-          s = s.replace(
-              old,
-              new,
-              1
-          )
-
-          p.write_text(s)
+          p.write_text(s2)
 
           print("")
           print("======================================")
-          print("MODERN OPENGL ES FORCED")
-          print("SOFTWARE RENDERER DISABLED AT RUNTIME")
+          print("MODERN GL FORCED")
           print("======================================")
           PY
 
       # ==========================================================
-      # v8 RUNTIME TUNING
+      # RUNTIME PERFORMANCE
       # ==========================================================
 
       - name: Apply v8 runtime performance tuning
@@ -2806,19 +2699,11 @@ jobs:
 
           s = p.read_text()
 
-          # ------------------------------------------------------
-          # HIGH PRIORITY GAME/VM THREAD
-          # ------------------------------------------------------
-
           old_thread = '''- (void)gameThread {
               NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];'''
 
           new_thread = '''- (void)gameThread {
               NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-
-              /*
-               * Super R-R v8
-               */
 
               if ([[NSThread currentThread]
                       respondsToSelector:
@@ -2849,20 +2734,12 @@ jobs:
                   "QoS marker changed, skipping."
               )
 
-          # ------------------------------------------------------
-          # 60% INTERNAL FRAMEBUFFER
-          #
-          # 0.60 x 0.60 = 36% of original pixels.
-          # ------------------------------------------------------
-
           old_scale = '''    targetScale += 0.0005f;
               if (targetScale > nativeScale) targetScale = nativeScale;'''
 
           new_scale = '''    /*
-               * Super R-R v8 MAX FPS.
-               *
-               * 60% linear resolution =
-               * about 36% of original pixel workload.
+               * Super R-R v8:
+               * 60% linear framebuffer scale.
                */
 
               targetScale *= 0.60f;
@@ -2895,13 +2772,8 @@ jobs:
 
           print("")
           print("======================================")
-          print("v8 RUNTIME PERFORMANCE")
-          print("======================================")
-          print("Modern GL: forced")
-          print("Framebuffer: 60%")
-          print("Pixel workload: ~36%")
-          print("Controller polling: OFF")
-          print("Game thread: UserInteractive")
+          print("v8 PERFORMANCE ACTIVE")
+          print("Framebuffer scale: 60%")
           print("======================================")
           PY
 
@@ -2937,7 +2809,7 @@ jobs:
           patch = '''#include "real_type.h"
 
           /*
-           * iOS already provides these math functions.
+           * iOS provides these math functions.
            */
           #if defined(__APPLE__)
           #undef NO_LROUND
@@ -2969,7 +2841,7 @@ jobs:
           PY
 
       # ==========================================================
-      # INSTALL FULL GAME AUTOMATICALLY
+      # AUTOMATIC INSTALLER
       # ==========================================================
 
       - name: Add automatic game installer
@@ -3090,12 +2962,12 @@ jobs:
           p.write_text(s)
 
           print(
-              "Automatic game installer complete."
+              "Automatic installer complete."
           )
           PY
 
       # ==========================================================
-      # SOURCE CHECK
+      # VERIFY PATCHES
       # ==========================================================
 
       - name: Verify v8 patches
@@ -3162,11 +3034,9 @@ jobs:
 
       # ==========================================================
       # BUILD
-      #
-      # SPECIFICALLY OPTIMIZED FOR APPLE A14
       # ==========================================================
 
-      - name: Build Super Redux-Redux FINAL PERFORMANCE v8
+      - name: Build Super Redux-Redux FINAL PERFORMANCE v8 FIXED
         shell: bash
         run: |
           set +e
@@ -3187,31 +3057,25 @@ jobs:
 
           echo
           echo "======================================"
-          echo "SUPER R-R FINAL PERFORMANCE v8"
+          echo "SUPER R-R FINAL PERFORMANCE v8 FIXED"
           echo "======================================"
           echo
-          echo "CPU: Apple A14"
           echo "ARM64"
-          echo "Modern OpenGL ES FORCED"
-          echo "Software rendering NOT USED"
+          echo "Modern GL"
           echo "O3"
           echo "Thin LTO"
-          echo "A14 scheduling/tuning"
-          echo "Frame pointer OFF"
-          echo "Profiler OFF"
-          echo "Opcode profiler OFF"
-          echo "Tracing OFF"
-          echo "Stub logs OFF"
-          echo "High resolution OFF"
-          echo "Framebuffer 60%"
-          echo "Controller polling OFF"
+          echo "frame pointer OFF"
+          echo "profiler OFF"
+          echo "tracing OFF"
+          echo "high resolution OFF"
+          echo "framebuffer 60%"
           echo
 
           make \
             -j4 \
             OS=iOS \
             CC="$IOS_CC" \
-            CFLAGS="-O3 -DNDEBUG -flto=thin -fomit-frame-pointer -fno-math-errno -ffp-contract=fast -mcpu=apple-a14 -mtune=apple-a14" \
+            CFLAGS="-O3 -DNDEBUG -flto=thin -fomit-frame-pointer -fno-math-errno -ffp-contract=fast" \
             LDFLAGS="-flto=thin -Wl,-dead_strip" \
             DISABLE_WAD14=1 \
             DISABLE_WAD17=1 \
@@ -3223,7 +3087,7 @@ jobs:
             BUTTERSCOTCH_COMMIT_DATE="$DATE" \
             2>&1 \
             | tee \
-              "$GITHUB_WORKSPACE/v8-build.log"
+              "$GITHUB_WORKSPACE/v8-fixed-build.log"
 
           STATUS=${PIPESTATUS[0]}
 
@@ -3238,7 +3102,7 @@ jobs:
               -n \
               -E \
               "error:|fatal error:|ERROR:" \
-              "$GITHUB_WORKSPACE/v8-build.log" \
+              "$GITHUB_WORKSPACE/v8-fixed-build.log" \
               | tail \
                   -200 \
               || true
@@ -3250,7 +3114,7 @@ jobs:
 
           echo
           echo "======================================"
-          echo "v8 BUILD FINISHED"
+          echo "v8 FIXED BUILD FINISHED"
           echo "======================================"
 
           find build \
@@ -3272,7 +3136,6 @@ jobs:
           BIN="$GITHUB_WORKSPACE/Butterscotch/build/butterscotch"
 
           test -f "$IPA"
-
           test -f "$BIN"
 
           echo
@@ -3309,7 +3172,7 @@ jobs:
       # OUTPUT
       # ==========================================================
 
-      - name: Prepare Super RR v8 IPA
+      - name: Prepare Super RR v8 FIXED IPA
         shell: bash
         run: |
           set -e
@@ -3319,94 +3182,69 @@ jobs:
 
           cp \
             "$GITHUB_WORKSPACE/Butterscotch/build/butterscotch.ipa" \
-            "$GITHUB_WORKSPACE/output/Super-Redux-Redux-iOS-v8-FINAL-PERFORMANCE.ipa"
+            "$GITHUB_WORKSPACE/output/Super-Redux-Redux-iOS-v8-FINAL-PERFORMANCE-FIXED.ipa"
 
           cat > \
             "$GITHUB_WORKSPACE/output/README.txt" \
             <<'EOF'
-
           SUPER REDUX-REDUX iOS
-          FINAL PERFORMANCE v8
-          ====================
-
-
-          PERFORMANCE
-          -----------
-
-          Modern OpenGL ES is FORCED.
-
-          The software renderer is no longer
-          selected by default.
-
-          ARM64 / Apple A14 optimized.
-
-          Internal framebuffer:
-          60 percent linear resolution,
-          around 36 percent of the old
-          pixel workload.
-
-          VM profiler OFF.
-          Opcode profiler OFF.
-          VM tracing OFF.
-          Stub logs OFF.
-
-          Thin LTO.
-          O3.
-          A14 CPU tuning.
-          High priority game thread.
-          Controller polling removed from
-          the touch-only build.
-
+          FINAL PERFORMANCE v8 FIXED
+          ==========================
 
           CONTROLS
-          --------
 
           LEFT STICK
           W A S D
 
-          RIGHT LOOK STICK
-          look / aim
-
-          TOUCH GAME AREA
-          direct aim
+          RIGHT LOOK
+          Aim / look
 
           A
-          shoot / punch / Enter
+          Shoot / punch / Enter
 
           X
-          pickup / throw
+          Pickup / throw
 
           C
-          interaction / execution
+          Interaction
 
           R
-          restart
+          Restart
 
           LOOK
           Shift
 
           LOCK
-          middle mouse
+          Middle mouse
 
           II
-          pause / Escape
+          Pause
 
           FPS
-          real FPS counter
+          Real FPS counter
 
 
-          TEST
-          ----
+          PERFORMANCE
 
-          Mask selection.
+          Modern GL preferred
+          ARM64
+          O3
+          Thin LTO
+          high resolution OFF
+          framebuffer 60%
+          VM profiler OFF
+          tracing OFF
+          stub logs OFF
+          GL optimization attempted
+          VM optimization attempted
 
-          Normal level.
+          Test first:
 
-          Large enemy fight.
+          Mask selection
+          Normal level
+          Enemy fight
 
-
-          IPA is unsigned/ad-hoc.
-
+          IPA unsigned/ad-hoc.
           EOF
 
           echo
@@ -3420,12 +3258,12 @@ jobs:
       # UPLOAD
       # ==========================================================
 
-      - name: Upload Super RR v8
+      - name: Upload Super RR v8 FIXED
         uses: actions/upload-artifact@v4
         with:
-          name: super-redux-redux-ios-v8-FINAL-PERFORMANCE
+          name: super-redux-redux-ios-v8-FINAL-PERFORMANCE-FIXED
           path: |
-            output/Super-Redux-Redux-iOS-v8-FINAL-PERFORMANCE.ipa
+            output/Super-Redux-Redux-iOS-v8-FINAL-PERFORMANCE-FIXED.ipa
             output/README.txt
           if-no-files-found: error
           retention-days: 7
@@ -3438,12 +3276,12 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: super-rr-v8-build-failed
+          name: super-rr-v8-fixed-build-failed
           path: |
             Butterscotch/src/ios/main.c
             Butterscotch/src/vm_builtins.c
             Butterscotch/src/math_compat.h
             Butterscotch/compat/config.mk
-            v8-build.log
+            v8-fixed-build.log
           if-no-files-found: ignore
           retention-days: 7
