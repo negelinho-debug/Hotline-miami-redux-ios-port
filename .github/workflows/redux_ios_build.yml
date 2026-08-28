@@ -1,4 +1,4 @@
-name: Super Redux-Redux iOS Final Candidate v4
+name: Super Redux-Redux iOS Final Candidate v5
 
 on:
   workflow_dispatch:
@@ -1157,12 +1157,6 @@ jobs:
           p = Path("Butterscotch/src/ios/main.c")
           s = p.read_text()
 
-          # ------------------------------------------------------
-          # FORCE NORMAL GAME RESOLUTION
-          # Prevent accidental high-resolution mode from reducing
-          # performance on an existing installation.
-          # ------------------------------------------------------
-
           old_highres = '''static bool bsLoadHighResEnabled(void) {
               return [[NSUserDefaults standardUserDefaults] boolForKey:BS_HIGH_RES_DEFAULTS_KEY];
           }'''
@@ -1177,10 +1171,6 @@ jobs:
                   new_highres,
                   1
               )
-
-          # ------------------------------------------------------
-          # REPURPOSE TOP-LEFT >> BUTTON INTO LOOK (SHIFT)
-          # ------------------------------------------------------
 
           old_ff_type = (
               'BSToggleKeyButton *_ffButton;'
@@ -1221,10 +1211,6 @@ jobs:
               1
           )
 
-          # ------------------------------------------------------
-          # ADD R + LOCK BUTTON FIELDS
-          # ------------------------------------------------------
-
           aim_field = '''    UITouch          *_aimTouch;'''
 
           new_fields = '''    UITouch          *_aimTouch;
@@ -1241,12 +1227,6 @@ jobs:
               new_fields,
               1
           )
-
-          # ------------------------------------------------------
-          # INITIALIZE R + LOCK
-          # R = restart
-          # LOCK = global middle mouse press
-          # ------------------------------------------------------
 
           aim_init = '''        _aimTouch = nil;'''
 
@@ -1277,12 +1257,6 @@ jobs:
               new_init,
               1
           )
-
-          # ------------------------------------------------------
-          # POSITION BUTTONS
-          # LOOK = original top-left button
-          # R and LOCK = beside quit button
-          # ------------------------------------------------------
 
           layout_line = '''    _ffButton.frame = layout.ffFrame;'''
 
@@ -1320,10 +1294,6 @@ jobs:
               1
           )
 
-          # ------------------------------------------------------
-          # DRAW NEW BUTTONS
-          # ------------------------------------------------------
-
           draw_line = '''    [_ffButton drawInContext:ctx];'''
 
           new_draw = '''    [_ffButton drawInContext:ctx];
@@ -1340,10 +1310,6 @@ jobs:
               new_draw,
               1
           )
-
-          # ------------------------------------------------------
-          # TOUCH START
-          # ------------------------------------------------------
 
           begin_marker = '''        if ([_ffButton handleTouchBegan:touch point:p]) continue;
                   if ([_dpad handleTouchBegan:touch point:p]) continue;'''
@@ -1364,10 +1330,6 @@ jobs:
               1
           )
 
-          # ------------------------------------------------------
-          # TOUCH END
-          # ------------------------------------------------------
-
           end_marker = '''        if ([_ffButton handleTouchEnded:touch]) continue;'''
 
           end_new = '''        if ([_ffButton handleTouchEnded:touch]) continue;
@@ -1384,10 +1346,6 @@ jobs:
               end_new,
               1
           )
-
-          # ------------------------------------------------------
-          # DEALLOC
-          # ------------------------------------------------------
 
           dealloc_marker = '''    [_ffButton release];
               for (int i = 0; i < 3; i++) [_actionButtons[i] release];'''
@@ -1412,27 +1370,908 @@ jobs:
 
           p.write_text(s)
 
-          print("FINAL Redux controls:")
-          print("R = restart")
-          print("LOOK = Shift / look farther")
-          print("LOCK = middle mouse / target lock")
-          print("High resolution forced OFF")
+          print("Existing v4 controls preserved.")
+          PY
+
+      - name: Add PAUSE FPS and right LOOK stick
+        shell: bash
+        run: |
+          set -e
+
+          cd "$GITHUB_WORKSPACE"
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          p = Path("Butterscotch/src/ios/main.c")
+          s = p.read_text()
+
+          # ======================================================
+          # FPS COUNTER STORAGE
+          # ======================================================
+
+          mouse_marker = '''static _Atomic double
+              bsTouchMouseY = 240.0;'''
+
+          fps_storage = '''static _Atomic double
+              bsTouchMouseY = 240.0;
+
+          static atomic_int
+              bsDisplayedFPS = 0;
+
+          static unsigned int
+              bsFPSFrameCount = 0;
+
+          static double
+              bsFPSStartTime = 0.0;'''
+
+          if mouse_marker not in s:
+              raise SystemExit(
+                  "ERROR: mouse storage marker missing"
+              )
+
+          s = s.replace(
+              mouse_marker,
+              fps_storage,
+              1
+          )
+
+          # ======================================================
+          # COUNT REAL PRESENTED FRAMES
+          # ======================================================
+
+          swap_marker = '''void platformSwapBuffers(void) {
+          #ifdef ENABLE_SW_RENDERER'''
+
+          swap_new = '''void platformSwapBuffers(void) {
+
+              bsFPSFrameCount++;
+
+              double bsNow =
+                  CACurrentMediaTime();
+
+              if (bsFPSStartTime <= 0.0)
+                  bsFPSStartTime = bsNow;
+
+              double bsElapsed =
+                  bsNow - bsFPSStartTime;
+
+              if (bsElapsed >= 0.50) {
+
+                  int fps =
+                      (int)(
+                          ((double)bsFPSFrameCount /
+                           bsElapsed) + 0.5
+                      );
+
+                  if (fps < 0)
+                      fps = 0;
+
+                  if (fps > 999)
+                      fps = 999;
+
+                  atomic_store(
+                      &bsDisplayedFPS,
+                      fps
+                  );
+
+                  bsFPSFrameCount = 0;
+                  bsFPSStartTime = bsNow;
+              }
+
+          #ifdef ENABLE_SW_RENDERER'''
+
+          if swap_marker not in s:
+              raise SystemExit(
+                  "ERROR: platformSwapBuffers marker missing"
+              )
+
+          s = s.replace(
+              swap_marker,
+              swap_new,
+              1
+          )
+
+          # ======================================================
+          # ADD LOOK FRAME TO LAYOUT
+          # ======================================================
+
+          layout_struct = '''    CGRect ffFrame;
+              bool   portrait;'''
+
+          layout_struct_new = '''    CGRect ffFrame;
+              CGRect lookFrame;
+              bool   portrait;'''
+
+          if layout_struct not in s:
+              raise SystemExit(
+                  "ERROR: BSLayout struct marker missing"
+              )
+
+          s = s.replace(
+              layout_struct,
+              layout_struct_new,
+              1
+          )
+
+          portrait_layout = '''        layout.buttonsFrame = CGRectMake(screen.width - 16 - 150, stripY + 30, 150, 50);'''
+
+          portrait_new = '''        layout.buttonsFrame = CGRectMake(screen.width - 16 - 150, stripY + 30, 150, 50);
+
+                  layout.lookFrame =
+                      CGRectMake(
+                          screen.width - 112.0f,
+                          fmaxf(
+                              BS_GAME_TOP_PADDING + 10.0f,
+                              stripY - 105.0f
+                          ),
+                          92.0f,
+                          92.0f
+                      );'''
+
+          if portrait_layout not in s:
+              raise SystemExit(
+                  "ERROR: portrait layout marker missing"
+              )
+
+          s = s.replace(
+              portrait_layout,
+              portrait_new,
+              1
+          )
+
+          landscape_layout = '''        layout.buttonsFrame = CGRectMake(screen.width - notchInset - 10 - 170, (screen.height - 130) / 2.0f + 60, 170, 60);'''
+
+          landscape_new = '''        layout.buttonsFrame = CGRectMake(screen.width - notchInset - 10 - 170, (screen.height - 130) / 2.0f + 60, 170, 60);
+
+                  layout.lookFrame =
+                      CGRectMake(
+                          screen.width -
+                              notchInset -
+                              118.0f,
+                          screen.height -
+                              112.0f,
+                          96.0f,
+                          96.0f
+                      );'''
+
+          if landscape_layout not in s:
+              raise SystemExit(
+                  "ERROR: landscape layout marker missing"
+              )
+
+          s = s.replace(
+              landscape_layout,
+              landscape_new,
+              1
+          )
+
+          # ======================================================
+          # RIGHT LOOK PAD INTERFACE
+          # ======================================================
+
+          overlay_interface_marker = '''@interface BSTouchOverlay : UIView {'''
+
+          look_interface = r'''
+          @interface BSLookPad : NSObject {
+              CGRect   _frame;
+              UITouch *_touch;
+              CGPoint  _thumbOffset;
+          }
+
+          @property (nonatomic) CGRect frame;
+
+          - (id)initWithFrame:(CGRect)frame;
+
+          - (BOOL)handleTouchBegan:
+              (UITouch *)touch
+              point:(CGPoint)point;
+
+          - (BOOL)handleTouchMoved:
+              (UITouch *)touch
+              point:(CGPoint)point;
+
+          - (BOOL)handleTouchEnded:
+              (UITouch *)touch;
+
+          - (void)drawInContext:
+              (CGContextRef)ctx;
+
+          @end
+
+
+          '''
+
+          if overlay_interface_marker not in s:
+              raise SystemExit(
+                  "ERROR: overlay interface marker missing"
+              )
+
+          s = s.replace(
+              overlay_interface_marker,
+              look_interface +
+              overlay_interface_marker,
+              1
+          )
+
+          # ======================================================
+          # ADD NEW OVERLAY FIELDS
+          # ======================================================
+
+          fields_marker = '''    BSActionButton   *_lockButton;'''
+
+          fields_new = '''    BSActionButton   *_lockButton;
+              BSKeyButton      *_pauseButton;
+              BSLookPad        *_lookPad;
+              UILabel          *_fpsLabel;
+              NSTimer          *_fpsTimer;'''
+
+          if fields_marker not in s:
+              raise SystemExit(
+                  "ERROR: v4 control fields missing"
+              )
+
+          s = s.replace(
+              fields_marker,
+              fields_new,
+              1
+          )
+
+          # ======================================================
+          # LAYOUT PAUSE + LOOK + FPS
+          # ======================================================
+
+          lock_layout = '''    _lockButton.frame =
+                  CGRectMake(
+                      rightEdge - 94.0f,
+                      BS_QUIT_BUTTON_MARGIN,
+                      46.0f,
+                      34.0f
+                  );'''
+
+          controls_layout = '''    _lockButton.frame =
+                  CGRectMake(
+                      rightEdge - 94.0f,
+                      BS_QUIT_BUTTON_MARGIN,
+                      46.0f,
+                      34.0f
+                  );
+
+              _pauseButton.frame =
+                  CGRectMake(
+                      (self.bounds.size.width -
+                       38.0f) * 0.5f,
+                      BS_QUIT_BUTTON_MARGIN,
+                      38.0f,
+                      34.0f
+                  );
+
+              _lookPad.frame =
+                  layout.lookFrame;
+
+              _fpsLabel.frame =
+                  CGRectMake(
+                      BS_QUIT_BUTTON_MARGIN +
+                          BS_FF_BUTTON_SIZE +
+                          8.0f,
+                      BS_QUIT_BUTTON_MARGIN,
+                      62.0f,
+                      24.0f
+                  );'''
+
+          if lock_layout not in s:
+              raise SystemExit(
+                  "ERROR: LOCK layout marker missing"
+              )
+
+          s = s.replace(
+              lock_layout,
+              controls_layout,
+              1
+          )
+
+          # ======================================================
+          # INIT PAUSE + LOOK + FPS
+          # ======================================================
+
+          aim_init = '''    _aimTouch = nil;'''
+
+          init_new = '''    _pauseButton =
+                      [[BSKeyButton alloc]
+                          initWithFrame:CGRectZero
+                          key:VK_ESCAPE
+                          label:@"II"
+                          font:13.0f
+                          hitExpansion:10.0f];
+
+                  _lookPad =
+                      [[BSLookPad alloc]
+                          initWithFrame:CGRectZero];
+
+                  _fpsLabel =
+                      [[UILabel alloc]
+                          initWithFrame:CGRectZero];
+
+                  _fpsLabel.backgroundColor =
+                      [UIColor colorWithWhite:0.0
+                                        alpha:0.35];
+
+                  _fpsLabel.textColor =
+                      [UIColor whiteColor];
+
+                  _fpsLabel.textAlignment =
+                      NSTextAlignmentCenter;
+
+                  _fpsLabel.font =
+                      [UIFont boldSystemFontOfSize:11.0f];
+
+                  _fpsLabel.text =
+                      @"FPS --";
+
+                  _fpsLabel.layer.cornerRadius =
+                      5.0f;
+
+                  _fpsLabel.clipsToBounds =
+                      YES;
+
+                  [self addSubview:_fpsLabel];
+
+                  _fpsTimer =
+                      [[NSTimer
+                          scheduledTimerWithTimeInterval:0.50
+                          target:self
+                          selector:@selector(bsUpdateFPSLabel:)
+                          userInfo:nil
+                          repeats:YES]
+                          retain];
+
+                  _aimTouch = nil;'''
+
+          # only replace initialization occurrence
+          if aim_init not in s:
+              raise SystemExit(
+                  "ERROR: aim initialization missing"
+              )
+
+          s = s.replace(
+              aim_init,
+              init_new,
+              1
+          )
+
+          # ======================================================
+          # FPS UPDATE METHOD
+          # ======================================================
+
+          drawrect_marker = '''- (void)drawRect:(CGRect)rect {'''
+
+          fps_method = r'''
+          - (void)bsUpdateFPSLabel:(NSTimer *)timer {
+
+              (void)timer;
+
+              int fps =
+                  atomic_load(
+                      &bsDisplayedFPS
+                  );
+
+              _fpsLabel.text =
+                  [NSString stringWithFormat:
+                      @"FPS %d",
+                      fps];
+          }
+
+
+          '''
+
+          if drawrect_marker not in s:
+              raise SystemExit(
+                  "ERROR: drawRect marker missing"
+              )
+
+          s = s.replace(
+              drawrect_marker,
+              fps_method +
+              drawrect_marker,
+              1
+          )
+
+          # ======================================================
+          # DRAW RIGHT LOOK + PAUSE
+          # ======================================================
+
+          draw_marker = '''    [_lockButton drawInContext:ctx];'''
+
+          draw_new = '''    [_lockButton drawInContext:ctx];
+              [_pauseButton drawInContext:ctx];
+              [_lookPad drawInContext:ctx];'''
+
+          if draw_marker not in s:
+              raise SystemExit(
+                  "ERROR: v4 draw marker missing"
+              )
+
+          s = s.replace(
+              draw_marker,
+              draw_new,
+              1
+          )
+
+          # ======================================================
+          # TOUCH BEGIN
+          # ======================================================
+
+          begin_marker = '''        if ([_lockButton handleTouchBegan:touch point:p]) continue;
+                  if ([_dpad handleTouchBegan:touch point:p]) continue;'''
+
+          begin_new = '''        if ([_lockButton handleTouchBegan:touch point:p]) continue;
+                  if ([_pauseButton handleTouchBegan:touch point:p]) continue;
+
+                  if ([_lookPad
+                          handleTouchBegan:touch
+                          point:p]) {
+
+                      [self setNeedsDisplay];
+                      continue;
+                  }
+
+                  if ([_dpad handleTouchBegan:touch point:p]) continue;'''
+
+          if begin_marker not in s:
+              raise SystemExit(
+                  "ERROR: touch begin v5 marker missing"
+              )
+
+          s = s.replace(
+              begin_marker,
+              begin_new,
+              1
+          )
+
+          # ======================================================
+          # TOUCH MOVE
+          # ======================================================
+
+          move_marker = '''        if ([_dpad
+                          handleTouchMoved:touch
+                          point:p]) {
+
+                      [self setNeedsDisplay];
+                      continue;
+                  }
+
+                  if (touch == _aimTouch) {'''
+
+          move_new = '''        if ([_dpad
+                          handleTouchMoved:touch
+                          point:p]) {
+
+                      [self setNeedsDisplay];
+                      continue;
+                  }
+
+                  if ([_lookPad
+                          handleTouchMoved:touch
+                          point:p]) {
+
+                      [self setNeedsDisplay];
+                      continue;
+                  }
+
+                  if (touch == _aimTouch) {'''
+
+          if move_marker not in s:
+              raise SystemExit(
+                  "ERROR: touch move v5 marker missing"
+              )
+
+          s = s.replace(
+              move_marker,
+              move_new,
+              1
+          )
+
+          # ======================================================
+          # TOUCH END
+          # ======================================================
+
+          end_marker = '''        if ([_lockButton handleTouchEnded:touch]) continue;'''
+
+          end_new = '''        if ([_lockButton handleTouchEnded:touch]) continue;
+                  if ([_pauseButton handleTouchEnded:touch]) continue;
+
+                  if ([_lookPad
+                          handleTouchEnded:touch]) {
+
+                      [self setNeedsDisplay];
+                      continue;
+                  }'''
+
+          if end_marker not in s:
+              raise SystemExit(
+                  "ERROR: touch end v5 marker missing"
+              )
+
+          s = s.replace(
+              end_marker,
+              end_new,
+              1
+          )
+
+          # ======================================================
+          # DEALLOC
+          # ======================================================
+
+          dealloc_marker = '''    [_restartButton release];
+              [_lockButton release];'''
+
+          dealloc_new = '''    [_restartButton release];
+              [_lockButton release];
+              [_pauseButton release];
+              [_lookPad release];
+
+              if (_fpsTimer) {
+                  [_fpsTimer invalidate];
+                  [_fpsTimer release];
+                  _fpsTimer = nil;
+              }
+
+              [_fpsLabel removeFromSuperview];
+              [_fpsLabel release];
+              _fpsLabel = nil;'''
+
+          if dealloc_marker not in s:
+              raise SystemExit(
+                  "ERROR: v5 dealloc marker missing"
+              )
+
+          s = s.replace(
+              dealloc_marker,
+              dealloc_new,
+              1
+          )
+
+          # ======================================================
+          # LOOK PAD IMPLEMENTATION
+          # Insert immediately before BSDpad implementation.
+          # ======================================================
+
+          dpad_impl_marker = '''@implementation BSDpad'''
+
+          look_impl = r'''
+          @implementation BSLookPad
+
+          @synthesize frame = _frame;
+
+
+          - (id)initWithFrame:(CGRect)frame {
+
+              if ((self = [super init])) {
+
+                  _frame =
+                      frame;
+
+                  _touch =
+                      nil;
+
+                  _thumbOffset =
+                      CGPointZero;
+              }
+
+              return self;
+          }
+
+
+          - (void)updateAimFromPoint:
+              (CGPoint)point {
+
+              CGPoint offset =
+                  joystickClampOffset(
+                      _frame,
+                      point
+                  );
+
+              _thumbOffset =
+                  offset;
+
+              CGFloat maxR =
+                  joystickRadius(
+                      _frame
+                  );
+
+              if (maxR <= 1.0f)
+                  return;
+
+              CGFloat nx =
+                  offset.x / maxR;
+
+              CGFloat ny =
+                  offset.y / maxR;
+
+              CGFloat deadzone =
+                  0.12f;
+
+              if (fabs(nx) < deadzone)
+                  nx = 0.0f;
+
+              if (fabs(ny) < deadzone)
+                  ny = 0.0f;
+
+              CGRect screen =
+                  [[UIScreen mainScreen]
+                      bounds];
+
+              double cx =
+                  screen.size.width * 0.5;
+
+              double cy =
+                  screen.size.height * 0.5;
+
+              double radiusX =
+                  screen.size.width * 0.42;
+
+              double radiusY =
+                  screen.size.height * 0.42;
+
+              double mx =
+                  cx +
+                  ((double)nx * radiusX);
+
+              double my =
+                  cy +
+                  ((double)ny * radiusY);
+
+              if (mx < 0.0)
+                  mx = 0.0;
+
+              if (my < 0.0)
+                  my = 0.0;
+
+              if (mx > screen.size.width)
+                  mx = screen.size.width;
+
+              if (my > screen.size.height)
+                  my = screen.size.height;
+
+              atomic_store(
+                  &bsTouchMouseX,
+                  mx
+              );
+
+              atomic_store(
+                  &bsTouchMouseY,
+                  my
+              );
+          }
+
+
+          - (BOOL)handleTouchBegan:
+              (UITouch *)touch
+              point:(CGPoint)point {
+
+              if (_touch)
+                  return NO;
+
+              if (!CGRectContainsPoint(
+                      CGRectInset(
+                          _frame,
+                          -12.0f,
+                          -12.0f
+                      ),
+                      point
+                  ))
+                  return NO;
+
+              _touch =
+                  [touch retain];
+
+              [self updateAimFromPoint:
+                  point];
+
+              return YES;
+          }
+
+
+          - (BOOL)handleTouchMoved:
+              (UITouch *)touch
+              point:(CGPoint)point {
+
+              if (touch != _touch)
+                  return NO;
+
+              [self updateAimFromPoint:
+                  point];
+
+              return YES;
+          }
+
+
+          - (BOOL)handleTouchEnded:
+              (UITouch *)touch {
+
+              if (touch != _touch)
+                  return NO;
+
+              _thumbOffset =
+                  CGPointZero;
+
+              [_touch release];
+
+              _touch =
+                  nil;
+
+              return YES;
+          }
+
+
+          - (void)drawInContext:
+              (CGContextRef)ctx {
+
+              CGFloat cx =
+                  _frame.origin.x +
+                  _frame.size.width *
+                  0.5f;
+
+              CGFloat cy =
+                  _frame.origin.y +
+                  _frame.size.height *
+                  0.5f;
+
+              CGFloat baseR =
+                  joystickRadius(
+                      _frame
+                  );
+
+              CGRect baseRect =
+                  CGRectMake(
+                      cx - baseR,
+                      cy - baseR,
+                      baseR * 2.0f,
+                      baseR * 2.0f
+                  );
+
+              CGContextSetRGBFillColor(
+                  ctx,
+                  1.0f,
+                  1.0f,
+                  1.0f,
+                  _touch
+                      ? 0.42f
+                      : 0.20f
+              );
+
+              CGContextFillEllipseInRect(
+                  ctx,
+                  baseRect
+              );
+
+              CGFloat thumbR =
+                  baseR * 0.34f;
+
+              CGFloat thumbX =
+                  cx +
+                  _thumbOffset.x;
+
+              CGFloat thumbY =
+                  cy +
+                  _thumbOffset.y;
+
+              CGRect thumbRect =
+                  CGRectMake(
+                      thumbX - thumbR,
+                      thumbY - thumbR,
+                      thumbR * 2.0f,
+                      thumbR * 2.0f
+                  );
+
+              CGContextSetRGBFillColor(
+                  ctx,
+                  1.0f,
+                  1.0f,
+                  1.0f,
+                  0.50f
+              );
+
+              CGContextFillEllipseInRect(
+                  ctx,
+                  thumbRect
+              );
+
+              CGContextSetRGBFillColor(
+                  ctx,
+                  1.0f,
+                  1.0f,
+                  1.0f,
+                  0.75f
+              );
+
+              UIFont *font =
+                  [UIFont
+                      boldSystemFontOfSize:
+                          8.0f];
+
+              NSString *label =
+                  @"LOOK";
+
+              CGSize labelSize =
+                  [label
+                      sizeWithAttributes:
+                          @{
+                              NSFontAttributeName:
+                                  font
+                          }];
+
+              [label drawAtPoint:
+                  CGPointMake(
+                      cx -
+                          labelSize.width /
+                          2.0f,
+                      cy -
+                          labelSize.height /
+                          2.0f
+                  )
+                  withAttributes:
+                      @{
+                          NSFontAttributeName:
+                              font,
+                          NSForegroundColorAttributeName:
+                              [UIColor whiteColor]
+                      }];
+          }
+
+
+          - (void)dealloc {
+
+              if (_touch)
+                  [_touch release];
+
+              [super dealloc];
+          }
+
+          @end
+
+
+          '''
+
+          if dpad_impl_marker not in s:
+              raise SystemExit(
+                  "ERROR: BSDpad implementation missing"
+              )
+
+          s = s.replace(
+              dpad_impl_marker,
+              look_impl +
+              dpad_impl_marker,
+              1
+          )
+
+          p.write_text(s)
+
+          print("======================================")
+          print("SUPER R-R v5 MOBILE PATCH COMPLETE")
+          print("======================================")
+          print("PAUSE = Escape")
+          print("FPS = real presented-frame counter")
+          print("RIGHT LOOK = virtual mouse aim stick")
+          print("Old v4 controls preserved")
           PY
 
           echo
-          echo "===== FINAL CONTROL CHECK ====="
+          echo "===== V5 PATCH CHECK ====="
 
           grep -n \
-            'label:@"LOOK"' \
+            'label:@"II"' \
             Butterscotch/src/ios/main.c
 
           grep -n \
-            'label:@"LOCK"' \
-            Butterscotch/src/ios/main.c
+            'BSLookPad' \
+            Butterscotch/src/ios/main.c \
+            | head -10
 
           grep -n \
-            "key:'R'" \
-            Butterscotch/src/ios/main.c
+            'bsDisplayedFPS' \
+            Butterscotch/src/ios/main.c \
+            | head -10
 
       - name: Add automatic game installer
         shell: bash
@@ -1545,10 +2384,10 @@ jobs:
 
           make distclean || true
 
-      - name: Build final Redux iOS
+      - name: Build final Redux iOS v5
         shell: bash
         run: |
-          set -e
+          set +e
 
           cd "$GITHUB_WORKSPACE/Butterscotch"
 
@@ -1572,7 +2411,28 @@ jobs:
             DISABLE_VM_STUB_LOGS=1 \
             DISABLE_VM_TRACING=1 \
             BUTTERSCOTCH_COMMIT_HASH="$HASH" \
-            BUTTERSCOTCH_COMMIT_DATE="$DATE"
+            BUTTERSCOTCH_COMMIT_DATE="$DATE" \
+            2>&1 | tee "$GITHUB_WORKSPACE/build-v5.log"
+
+          STATUS=${PIPESTATUS[0]}
+
+          if [ "$STATUS" -ne 0 ]; then
+
+            echo
+            echo "======================================"
+            echo "REAL BUILD ERRORS"
+            echo "======================================"
+
+            grep -n -E \
+              "error:|fatal error:|ERROR:" \
+              "$GITHUB_WORKSPACE/build-v5.log" \
+              | tail -120 \
+              || true
+
+            echo "======================================"
+
+            exit "$STATUS"
+          fi
 
           echo
           echo "===== BUILD FINISHED ====="
@@ -1621,21 +2481,25 @@ jobs:
 
           cp \
             "$GITHUB_WORKSPACE/Butterscotch/build/butterscotch.ipa" \
-            "$GITHUB_WORKSPACE/output/Super-Redux-Redux-iOS-v4-Final-Candidate.ipa"
+            "$GITHUB_WORKSPACE/output/Super-Redux-Redux-iOS-v5-Final-Candidate.ipa"
 
           cat > "$GITHUB_WORKSPACE/output/README.txt" <<'EOF'
-          SUPER REDUX-REDUX iOS v4
+          SUPER REDUX-REDUX iOS v5
           ========================
 
-          FINAL CANDIDATE
+          FINAL MOBILE CANDIDATE
 
           CONTROLS
 
           LEFT JOYSTICK
           W/A/S/D movement
 
+          RIGHT LOOK JOYSTICK
+          Look / aim around without touching
+          the game area directly
+
           TOUCH GAME AREA
-          aim / crosshair
+          Direct aim / crosshair
 
           A
           left mouse
@@ -1658,8 +2522,14 @@ jobs:
           equivalent to Shift
 
           LOCK
-          target lock / auto aim
+          target lock
           equivalent to middle mouse
+
+          II
+          pause / Escape
+
+          FPS
+          small real-time presented-frame counter
 
           PERFORMANCE
 
@@ -1670,6 +2540,17 @@ jobs:
           - O3 optimized build
           - high-resolution framebuffer forced off
           - arm64 iPhone build
+
+          IMPORTANT
+
+          This v5 keeps the previous v4 controls.
+
+          The right LOOK stick is separate from
+          the left movement joystick.
+
+          Enemy collision-through-walls and true
+          nearest-enemy auto aim are game-logic
+          issues and are NOT faked in this build.
 
           GAME
 
@@ -1684,9 +2565,9 @@ jobs:
       - name: Upload final candidate IPA
         uses: actions/upload-artifact@v4
         with:
-          name: super-redux-redux-ios-v4-final
+          name: super-redux-redux-ios-v5-final
           path: |
-            output/Super-Redux-Redux-iOS-v4-Final-Candidate.ipa
+            output/Super-Redux-Redux-iOS-v5-Final-Candidate.ipa
             output/README.txt
           if-no-files-found: error
           retention-days: 7
@@ -1695,10 +2576,11 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: redux-ios-v4-failed
+          name: redux-ios-v5-failed
           path: |
             Butterscotch/src/ios/main.c
             Butterscotch/src/vm_builtins.c
             Butterscotch/compat/config.mk
+            build-v5.log
           if-no-files-found: ignore
           retention-days: 7
