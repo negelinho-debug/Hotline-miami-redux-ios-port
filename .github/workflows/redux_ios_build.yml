@@ -1,4 +1,4 @@
-name: Super Redux-Redux iOS Final Candidate v5
+name: Super Redux-Redux iOS Performance v6
 
 on:
   workflow_dispatch:
@@ -14,6 +14,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # ==========================================================
+      # GAME
+      # ==========================================================
 
       - name: Download Super Redux-Redux
         shell: bash
@@ -69,6 +73,10 @@ jobs:
 
           du -sh "$GAME_DIR"
 
+      # ==========================================================
+      # BUTTERSCOTCH
+      # ==========================================================
+
       - name: Download Butterscotch iOS
         shell: bash
         run: |
@@ -84,6 +92,75 @@ jobs:
 
           echo "Butterscotch:"
           git rev-parse HEAD
+
+      # ==========================================================
+      # NEW v6 PERFORMANCE
+      #
+      # Try VM stack allocation optimisation.
+      # If it conflicts with the iOS branch, restore old source.
+      # ==========================================================
+
+      - name: Apply VM performance optimization
+        shell: bash
+        run: |
+          set -e
+
+          cd "$GITHUB_WORKSPACE/Butterscotch"
+
+          echo
+          echo "======================================"
+          echo "VM PERFORMANCE PATCH"
+          echo "======================================"
+
+          BEFORE="$(git rev-parse HEAD)"
+
+          git remote remove upstream 2>/dev/null || true
+
+          git remote add upstream \
+            https://github.com/ButterscotchRunner/Butterscotch.git
+
+          if git fetch \
+              --depth 50 \
+              upstream \
+              pull/372/head:perf-vm-372; then
+
+            echo "Performance branch downloaded."
+
+            if git cherry-pick \
+                e51a6d5 \
+                20bc047; then
+
+              echo
+              echo "VM PERFORMANCE PATCH APPLIED"
+              echo "Stack args/locals optimization enabled."
+
+            else
+
+              echo
+              echo "VM patch conflicts with iOS branch."
+              echo "Restoring known-working source..."
+
+              git cherry-pick --abort || true
+              git reset --hard "$BEFORE"
+
+              echo "Old VM preserved."
+            fi
+
+          else
+
+            echo "Could not download VM optimization."
+            echo "Continuing with normal iOS VM."
+
+            git reset --hard "$BEFORE"
+          fi
+
+          echo
+          echo "Current source:"
+          git log --oneline -5
+
+      # ==========================================================
+      # COMPILER
+      # ==========================================================
 
       - name: Prepare iPhone compiler
         shell: bash
@@ -109,6 +186,10 @@ jobs:
           echo "IOS_CC=$RUNNER_TEMP/ios-clang" \
             >> "$GITHUB_ENV"
 
+      # ==========================================================
+      # APP INFO
+      # ==========================================================
+
       - name: Set app info
         shell: bash
         run: |
@@ -132,6 +213,10 @@ jobs:
             -c "Set :MinimumOSVersion 12.0" \
             "$PLIST"
 
+      # ==========================================================
+      # BUNDLE GAME
+      # ==========================================================
+
       - name: Bundle complete Super Redux-Redux
         shell: bash
         run: |
@@ -153,6 +238,10 @@ jobs:
 
           echo "Files:"
           find "$BUNDLED" -type f | wc -l
+
+      # ==========================================================
+      # RENDERING COMPATIBILITY
+      # ==========================================================
 
       - name: Patch Redux rendering
         shell: bash
@@ -562,6 +651,10 @@ jobs:
 
           print("Rendering patch complete.")
           PY
+
+      # ==========================================================
+      # ORIGINAL MOBILE CONTROLS
+      # ==========================================================
 
       - name: Patch Redux gameplay controls
         shell: bash
@@ -1144,6 +1237,11 @@ jobs:
           print("Main touch controls complete.")
           PY
 
+      # ==========================================================
+      # OLD v4 CONTROLS
+      # R / LOOK / LOCK
+      # ==========================================================
+
       - name: Add R LOOK LOCK and performance fixes
         shell: bash
         run: |
@@ -1156,6 +1254,10 @@ jobs:
 
           p = Path("Butterscotch/src/ios/main.c")
           s = p.read_text()
+
+          # ------------------------------------------------------
+          # FORCE NORMAL GAME RESOLUTION
+          # ------------------------------------------------------
 
           old_highres = '''static bool bsLoadHighResEnabled(void) {
               return [[NSUserDefaults standardUserDefaults] boolForKey:BS_HIGH_RES_DEFAULTS_KEY];
@@ -1171,6 +1273,10 @@ jobs:
                   new_highres,
                   1
               )
+
+          # ------------------------------------------------------
+          # LOOK
+          # ------------------------------------------------------
 
           old_ff_type = (
               'BSToggleKeyButton *_ffButton;'
@@ -1210,6 +1316,10 @@ jobs:
               new_ff_init,
               1
           )
+
+          # ------------------------------------------------------
+          # R + LOCK
+          # ------------------------------------------------------
 
           aim_field = '''    UITouch          *_aimTouch;'''
 
@@ -1370,8 +1480,12 @@ jobs:
 
           p.write_text(s)
 
-          print("Existing v4 controls preserved.")
+          print("v4 controls preserved.")
           PY
+
+      # ==========================================================
+      # v5 PAUSE + FPS COUNTER + RIGHT LOOK STICK
+      # ==========================================================
 
       - name: Add PAUSE FPS and right LOOK stick
         shell: bash
@@ -1417,7 +1531,7 @@ jobs:
           )
 
           # ======================================================
-          # COUNT REAL PRESENTED FRAMES
+          # COUNT REAL FRAMES
           # ======================================================
 
           swap_marker = '''void platformSwapBuffers(void) {
@@ -1473,7 +1587,7 @@ jobs:
           )
 
           # ======================================================
-          # ADD LOOK FRAME TO LAYOUT
+          # LOOK FRAME
           # ======================================================
 
           layout_struct = '''    CGRect ffFrame;
@@ -1547,7 +1661,7 @@ jobs:
           )
 
           # ======================================================
-          # RIGHT LOOK PAD INTERFACE
+          # LOOK PAD INTERFACE
           # ======================================================
 
           overlay_interface_marker = '''@interface BSTouchOverlay : UIView {'''
@@ -1595,7 +1709,7 @@ jobs:
           )
 
           # ======================================================
-          # ADD NEW OVERLAY FIELDS
+          # FIELDS
           # ======================================================
 
           fields_marker = '''    BSActionButton   *_lockButton;'''
@@ -1618,7 +1732,7 @@ jobs:
           )
 
           # ======================================================
-          # LAYOUT PAUSE + LOOK + FPS
+          # LAYOUT
           # ======================================================
 
           lock_layout = '''    _lockButton.frame =
@@ -1671,7 +1785,7 @@ jobs:
           )
 
           # ======================================================
-          # INIT PAUSE + LOOK + FPS
+          # INIT
           # ======================================================
 
           aim_init = '''    _aimTouch = nil;'''
@@ -1727,7 +1841,6 @@ jobs:
 
                   _aimTouch = nil;'''
 
-          # only replace initialization occurrence
           if aim_init not in s:
               raise SystemExit(
                   "ERROR: aim initialization missing"
@@ -1740,7 +1853,7 @@ jobs:
           )
 
           # ======================================================
-          # FPS UPDATE METHOD
+          # FPS LABEL
           # ======================================================
 
           drawrect_marker = '''- (void)drawRect:(CGRect)rect {'''
@@ -1777,7 +1890,7 @@ jobs:
           )
 
           # ======================================================
-          # DRAW RIGHT LOOK + PAUSE
+          # DRAW
           # ======================================================
 
           draw_marker = '''    [_lockButton drawInContext:ctx];'''
@@ -1933,7 +2046,6 @@ jobs:
 
           # ======================================================
           # LOOK PAD IMPLEMENTATION
-          # Insert immediately before BSDpad implementation.
           # ======================================================
 
           dpad_impl_marker = '''@implementation BSDpad'''
@@ -2177,14 +2289,6 @@ jobs:
                   thumbRect
               );
 
-              CGContextSetRGBFillColor(
-                  ctx,
-                  1.0f,
-                  1.0f,
-                  1.0f,
-                  0.75f
-              );
-
               UIFont *font =
                   [UIFont
                       boldSystemFontOfSize:
@@ -2247,31 +2351,72 @@ jobs:
 
           p.write_text(s)
 
-          print("======================================")
-          print("SUPER R-R v5 MOBILE PATCH COMPLETE")
-          print("======================================")
-          print("PAUSE = Escape")
-          print("FPS = real presented-frame counter")
-          print("RIGHT LOOK = virtual mouse aim stick")
-          print("Old v4 controls preserved")
+          print("v5 controls preserved.")
+          print("Pause = YES")
+          print("FPS counter = YES")
+          print("Right LOOK stick = YES")
           PY
 
-          echo
-          echo "===== V5 PATCH CHECK ====="
+      # ==========================================================
+      # NEW v6 RUNTIME CPU SCHEDULING
+      #
+      # Do not modify gameplay.
+      # Give game thread UserInteractive QoS.
+      # ==========================================================
 
-          grep -n \
-            'label:@"II"' \
-            Butterscotch/src/ios/main.c
+      - name: Add v6 runtime FPS tuning
+        shell: bash
+        run: |
+          set -e
 
-          grep -n \
-            'BSLookPad' \
-            Butterscotch/src/ios/main.c \
-            | head -10
+          cd "$GITHUB_WORKSPACE"
 
-          grep -n \
-            'bsDisplayedFPS' \
-            Butterscotch/src/ios/main.c \
-            | head -10
+          python3 <<'PY'
+          from pathlib import Path
+
+          p = Path("Butterscotch/src/ios/main.c")
+          s = p.read_text()
+
+          old = '''- (void)gameThread {
+              NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];'''
+
+          new = '''- (void)gameThread {
+              NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+
+              /*
+               * Super R-R v6 performance:
+               * game/VM thread gets highest interactive QoS.
+               * No gameplay logic is changed.
+               */
+              if ([[NSThread currentThread]
+                      respondsToSelector:
+                          @selector(setQualityOfService:)]) {
+
+                  [[NSThread currentThread]
+                      setQualityOfService:
+                          NSQualityOfServiceUserInteractive];
+              }'''
+
+          if old not in s:
+              raise SystemExit(
+                  "ERROR: gameThread marker missing"
+              )
+
+          s = s.replace(
+              old,
+              new,
+              1
+          )
+
+          p.write_text(s)
+
+          print("Game thread QoS = UserInteractive")
+          print("Gameplay unchanged.")
+          PY
+
+      # ==========================================================
+      # AUTOMATIC GAME INSTALL
+      # ==========================================================
 
       - name: Add automatic game installer
         shell: bash
@@ -2377,6 +2522,10 @@ jobs:
           print("Bundled game installer complete.")
           PY
 
+      # ==========================================================
+      # CLEAN
+      # ==========================================================
+
       - name: Clean previous build
         shell: bash
         run: |
@@ -2384,7 +2533,17 @@ jobs:
 
           make distclean || true
 
-      - name: Build final Redux iOS v5
+      # ==========================================================
+      # v6 PERFORMANCE BUILD
+      #
+      # O3
+      # Thin LTO
+      # frame pointer removed
+      # VM profilers/logs/tracing disabled
+      # normal render resolution
+      # ==========================================================
+
+      - name: Build Super Redux-Redux Performance v6
         shell: bash
         run: |
           set +e
@@ -2399,11 +2558,28 @@ jobs:
             git show -s --format=%cs HEAD
           )"
 
+          echo
+          echo "======================================"
+          echo "SUPER R-R PERFORMANCE v6"
+          echo "======================================"
+          echo
+          echo "ARM64"
+          echo "O3"
+          echo "Thin LTO"
+          echo "Frame pointer OFF"
+          echo "High resolution OFF"
+          echo "VM GML profiler OFF"
+          echo "VM opcode profiler OFF"
+          echo "VM tracing OFF"
+          echo "VM stub logs OFF"
+          echo
+
           make \
-            -j3 \
+            -j4 \
             OS=iOS \
             CC="$IOS_CC" \
-            CFLAGS="-O3 -DNDEBUG" \
+            CFLAGS="-O3 -DNDEBUG -flto=thin -fomit-frame-pointer" \
+            LDFLAGS="-flto=thin" \
             DISABLE_WAD14=1 \
             DISABLE_WAD17=1 \
             DISABLE_VM_GML_PROFILER=1 \
@@ -2412,7 +2588,7 @@ jobs:
             DISABLE_VM_TRACING=1 \
             BUTTERSCOTCH_COMMIT_HASH="$HASH" \
             BUTTERSCOTCH_COMMIT_DATE="$DATE" \
-            2>&1 | tee "$GITHUB_WORKSPACE/build-v5.log"
+            2>&1 | tee "$GITHUB_WORKSPACE/performance-v6.log"
 
           STATUS=${PIPESTATUS[0]}
 
@@ -2425,8 +2601,8 @@ jobs:
 
             grep -n -E \
               "error:|fatal error:|ERROR:" \
-              "$GITHUB_WORKSPACE/build-v5.log" \
-              | tail -120 \
+              "$GITHUB_WORKSPACE/performance-v6.log" \
+              | tail -150 \
               || true
 
             echo "======================================"
@@ -2435,12 +2611,18 @@ jobs:
           fi
 
           echo
-          echo "===== BUILD FINISHED ====="
+          echo "======================================"
+          echo "PERFORMANCE BUILD FINISHED"
+          echo "======================================"
 
           find build \
             -maxdepth 2 \
             -type f \
             -print
+
+      # ==========================================================
+      # VERIFY
+      # ==========================================================
 
       - name: Verify IPA
         shell: bash
@@ -2472,7 +2654,11 @@ jobs:
             | grep -i \
               "BundledGame/data.win"
 
-      - name: Prepare final candidate
+      # ==========================================================
+      # OUTPUT
+      # ==========================================================
+
+      - name: Prepare Performance v6
         shell: bash
         run: |
           set -e
@@ -2481,93 +2667,111 @@ jobs:
 
           cp \
             "$GITHUB_WORKSPACE/Butterscotch/build/butterscotch.ipa" \
-            "$GITHUB_WORKSPACE/output/Super-Redux-Redux-iOS-v5-Final-Candidate.ipa"
+            "$GITHUB_WORKSPACE/output/Super-Redux-Redux-iOS-v6-Performance.ipa"
 
           cat > "$GITHUB_WORKSPACE/output/README.txt" <<'EOF'
-          SUPER REDUX-REDUX iOS v5
-          ========================
+          SUPER REDUX-REDUX iOS v6 PERFORMANCE
+          ====================================
 
-          FINAL MOBILE CANDIDATE
+          THIS BUILD FOCUSES ON FPS.
+
+          OLD CONTROLS ARE PRESERVED.
+
 
           CONTROLS
+          --------
 
           LEFT JOYSTICK
           W/A/S/D movement
 
           RIGHT LOOK JOYSTICK
-          Look / aim around without touching
-          the game area directly
+          Look / aim around
 
           TOUCH GAME AREA
           Direct aim / crosshair
 
           A
-          left mouse
-          punch / shoot
+          Left mouse
+          Punch / shoot
           Enter in menus
 
           X
-          right mouse
-          pickup / throw weapon
+          Right mouse
+          Pickup / throw weapon
 
           C
           Space
-          execution / interaction
+          Execution / interaction
 
           R
-          restart after death
+          Restart after death
 
           LOOK
-          hold to look farther
-          equivalent to Shift
+          Shift
+          Look farther
 
           LOCK
-          target lock
-          equivalent to middle mouse
+          Middle mouse
+          Target lock
 
           II
-          pause / Escape
+          Escape / Pause
 
-          FPS
-          small real-time presented-frame counter
 
-          PERFORMANCE
+          FPS COUNTER
+          -----------
 
-          - VM profiler disabled
+          Small real-time FPS counter remains enabled.
+
+
+          PERFORMANCE v6
+          --------------
+
+          - ARM64 iPhone build
+          - O3 optimisation
+          - Thin LTO
+          - frame pointer omitted
+          - high-resolution framebuffer forced OFF
+          - GameMaker VM profiler disabled
           - opcode profiler disabled
-          - stub logging disabled
-          - tracing disabled
-          - O3 optimized build
-          - high-resolution framebuffer forced off
-          - arm64 iPhone build
+          - VM tracing disabled
+          - VM stub logging disabled
+          - game thread UserInteractive QoS
+          - VM stack args/locals optimisation attempted
+          - safe fallback to old VM if patch conflicts
+
 
           IMPORTANT
+          ---------
 
-          This v5 keeps the previous v4 controls.
+          This build DOES NOT fake the FPS number.
 
-          The right LOOK stick is separate from
-          the left movement joystick.
+          The displayed FPS is measured from actual
+          presented game frames.
 
-          Enemy collision-through-walls and true
-          nearest-enemy auto aim are game-logic
-          issues and are NOT faked in this build.
+          60 FPS is the target, not a guaranteed result.
+
+          Enemy-wall collision and nearest-enemy auto aim
+          are not changed in this performance-only build.
+
 
           GAME
+          ----
 
           Full Super Redux-Redux is bundled inside IPA.
 
-          This IPA is unsigned/ad-hoc.
-          Re-sign it using your sideloading method.
+          IPA is unsigned/ad-hoc.
+          Re-sign using your normal sideload method.
           EOF
 
           ls -lh "$GITHUB_WORKSPACE/output"
 
-      - name: Upload final candidate IPA
+      - name: Upload Performance v6 IPA
         uses: actions/upload-artifact@v4
         with:
-          name: super-redux-redux-ios-v5-final
+          name: super-redux-redux-ios-v6-performance
           path: |
-            output/Super-Redux-Redux-iOS-v5-Final-Candidate.ipa
+            output/Super-Redux-Redux-iOS-v6-Performance.ipa
             output/README.txt
           if-no-files-found: error
           retention-days: 7
@@ -2576,11 +2780,11 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: redux-ios-v5-failed
+          name: redux-ios-v6-performance-failed
           path: |
             Butterscotch/src/ios/main.c
             Butterscotch/src/vm_builtins.c
             Butterscotch/compat/config.mk
-            build-v5.log
+            performance-v6.log
           if-no-files-found: ignore
           retention-days: 7
