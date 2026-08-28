@@ -1,4 +1,4 @@
-name: Super Redux-Redux iOS FINAL MAX FPS v10
+name: Super Redux-Redux iOS FINAL MAX FPS v10 FIXED
 
 on:
   workflow_dispatch:
@@ -24,10 +24,7 @@ jobs:
         uses: actions/checkout@v4
 
       # ==========================================================
-      # CHECK OLD WORKFLOW
-      #
-      # We reuse the patch steps that already went GREEN
-      # in the existing v9 workflow.
+      # CHECK OLD v9 WORKFLOW
       # ==========================================================
 
       - name: Check existing Super RR workflow
@@ -39,39 +36,28 @@ jobs:
 
           if [ ! -f "$BASE" ]; then
             echo "ERROR: redux_ios_build.yml not found"
-            echo
-            echo "Keep the old redux_ios_build.yml"
-            echo "and create this v10 as a NEW workflow file."
+            echo "Keep the old v9 workflow in the repository."
             exit 1
           fi
 
-          echo "Found:"
-          echo "$BASE"
-
-          grep -n \
-            "Patch Redux gameplay controls" \
-            "$BASE"
-
-          grep -n \
-            "Add R LOOK LOCK" \
-            "$BASE"
-
-          grep -n \
-            "Add PAUSE FPS and right LOOK" \
-            "$BASE"
-
-          grep -n \
-            "Force Modern GL and performance mode" \
-            "$BASE"
+          grep -n "Download Super Redux-Redux" "$BASE"
+          grep -n "Patch Redux gameplay controls" "$BASE"
+          grep -n "Add R LOOK LOCK" "$BASE"
+          grep -n "Add PAUSE FPS and right LOOK" "$BASE"
+          grep -n "Force Modern GL and performance mode" "$BASE"
 
           echo
           echo "Base workflow ready."
 
       # ==========================================================
-      # RUN THE ALREADY-TESTED GREEN STEPS FROM v9
+      # REUSE ALL WORKING v9 PATCHES
       #
-      # This avoids copying thousands of lines again.
-      # We intentionally STOP before the profiler.
+      # IMPORTANT FIX:
+      #
+      # python3 -
+      #
+      # means Python reads the helper program from stdin.
+      # The old YAML is NOT executed as Python anymore.
       # ==========================================================
 
       - name: Apply known-good Super RR patches
@@ -85,25 +71,32 @@ jobs:
 
             STEP_NAME="$1"
 
+            TMP_SCRIPT="$RUNNER_TEMP/superrr-step.sh"
+
             echo
             echo "========================================"
             echo "RUNNING: $STEP_NAME"
             echo "========================================"
 
-            TMP_SCRIPT="$RUNNER_TEMP/superrr-step.sh"
-
-            python3 \
-              "$BASE" \
-              "$STEP_NAME" \
-              "$TMP_SCRIPT" <<'PY'
+            python3 - "$BASE" "$STEP_NAME" "$TMP_SCRIPT" <<'PY'
           from pathlib import Path
           import sys
 
-          workflow_path = Path(sys.argv[1])
-          wanted_name = sys.argv[2]
-          output_path = Path(sys.argv[3])
+          workflow_path = Path(
+              sys.argv[1]
+          )
 
-          lines = workflow_path.read_text().splitlines()
+          wanted_name = sys.argv[2]
+
+          output_path = Path(
+              sys.argv[3]
+          )
+
+          lines = (
+              workflow_path
+              .read_text()
+              .splitlines()
+          )
 
           step_line = (
               "      - name: " +
@@ -113,11 +106,14 @@ jobs:
           start_index = None
 
           for i, line in enumerate(lines):
+
               if line.rstrip() == step_line:
+
                   start_index = i
                   break
 
           if start_index is None:
+
               raise SystemExit(
                   "ERROR: step not found: " +
                   wanted_name
@@ -129,6 +125,7 @@ jobs:
               start_index + 1,
               len(lines)
           ):
+
               line = lines[i]
 
               if line.startswith(
@@ -139,10 +136,12 @@ jobs:
               if line.rstrip() == (
                   "        run: |"
               ):
+
                   run_index = i
                   break
 
           if run_index is None:
+
               raise SystemExit(
                   "ERROR: run block missing: " +
                   wanted_name
@@ -154,6 +153,7 @@ jobs:
               run_index + 1,
               len(lines)
           ):
+
               line = lines[i]
 
               if line.startswith(
@@ -162,20 +162,25 @@ jobs:
                   break
 
               if line.strip() == "":
+
                   code.append("")
                   continue
 
               if line.startswith(
                   "          "
               ):
+
                   code.append(
                       line[10:]
                   )
+
                   continue
 
               indent = (
                   len(line) -
-                  len(line.lstrip(" "))
+                  len(
+                      line.lstrip(" ")
+                  )
               )
 
               if indent < 10:
@@ -186,6 +191,7 @@ jobs:
               )
 
           if not code:
+
               raise SystemExit(
                   "ERROR: empty run block: " +
                   wanted_name
@@ -202,24 +208,30 @@ jobs:
           )
           PY
 
-            chmod +x "$TMP_SCRIPT"
+            chmod +x \
+              "$TMP_SCRIPT"
 
-            bash "$TMP_SCRIPT"
+            bash \
+              "$TMP_SCRIPT"
 
-            # GitHub normally loads GITHUB_ENV
-            # between Actions steps.
+            # ----------------------------------------------
+            # Old Actions steps can write variables such as
+            # GAME_DIR and IOS_CC into GITHUB_ENV.
             #
-            # Here several old steps run inside
-            # one Actions step, so reload simple
-            # KEY=value entries ourselves.
+            # Because we execute several old steps inside
+            # this one step, reload simple KEY=value lines.
+            # ----------------------------------------------
+
             if [ -f "$GITHUB_ENV" ]; then
 
               while IFS= read -r ENV_LINE; do
 
                 case "$ENV_LINE" in
+
                   *=*)
                     export "$ENV_LINE"
                     ;;
+
                 esac
 
               done < "$GITHUB_ENV"
@@ -230,9 +242,9 @@ jobs:
             echo "DONE: $STEP_NAME"
           }
 
-          # ------------------------------------------------------
-          # SAME STEPS THAT ALREADY PASSED ON YOUR SCREEN
-          # ------------------------------------------------------
+          # ======================================================
+          # SAME PATCHES / CONTROLS FROM v9
+          # ======================================================
 
           run_old_step \
             "Download Super Redux-Redux"
@@ -267,13 +279,32 @@ jobs:
           run_old_step \
             "Force Modern GL and performance mode"
 
+          # ======================================================
+          # KEEP MATH FIX + AUTOMATIC GAME INSTALLER
+          # ======================================================
+
+          run_old_step \
+            "Fix iOS math compatibility"
+
+          run_old_step \
+            "Add automatic game installer"
+
+          # ======================================================
+          # WE INTENTIONALLY DO NOT RUN:
+          #
+          # Add GML profiler switch
+          # Save profiler results to Files app
+          #
+          # Final build has profiler completely compiled out.
+          # ======================================================
+
           echo
           echo "========================================"
-          echo "ALL KNOWN-GOOD PATCHES APPLIED"
+          echo "ALL BASE PATCHES APPLIED"
           echo "========================================"
 
       # ==========================================================
-      # FINAL MAX-FPS PATCH
+      # FINAL PERFORMANCE CHANGES
       # ==========================================================
 
       - name: Apply FINAL MAX FPS tuning
@@ -291,42 +322,21 @@ jobs:
               "Butterscotch/src/ios/main.c"
           )
 
-          loop = Path(
-              "Butterscotch/src/loop.c"
-          )
-
-          math = Path(
-              "Butterscotch/src/math_compat.h"
-          )
-
           if not main.exists():
+
               raise SystemExit(
                   "ERROR: main.c missing"
               )
 
-          if not loop.exists():
-              raise SystemExit(
-                  "ERROR: loop.c missing"
-              )
-
-          if not math.exists():
-              raise SystemExit(
-                  "ERROR: math_compat.h missing"
-              )
-
-          # ======================================================
-          # MAIN.C
-          # ======================================================
-
           s = main.read_text()
 
-          # ------------------------------------------------------
-          # 1. DO NOT POLL PHYSICAL CONTROLLERS EVERY FRAME
+          # ======================================================
+          # 1. REMOVE UNUSED PHYSICAL CONTROLLER POLLING
           #
-          # This build uses the touch controls.
-          # ------------------------------------------------------
+          # Touch controls stay.
+          # ======================================================
 
-          pattern = re.compile(
+          controller_pattern = re.compile(
               r'(bool\s+platformHandleEvents'
               r'\s*\(\s*void\s*\)\s*\{\s*)'
               r'bsPollGameControllers'
@@ -334,31 +344,37 @@ jobs:
               re.MULTILINE
           )
 
-          s2, count = pattern.subn(
-              r'\1',
-              s,
-              count=1
+          s2, count = (
+              controller_pattern.subn(
+                  r'\1',
+                  s,
+                  count=1
+              )
           )
 
           if count == 1:
+
               s = s2
+
               print(
-                  "GameController polling OFF."
-              )
-          else:
-              print(
-                  "GameController poll already removed."
+                  "Controller polling removed."
               )
 
-          # ------------------------------------------------------
-          # 2. MAX FPS INTERNAL RESOLUTION
+          else:
+
+              print(
+                  "Controller polling already absent."
+              )
+
+          # ======================================================
+          # 2. FINAL INTERNAL RESOLUTION
           #
-          # Previous patch = 72%.
+          # v9 used 72%.
           #
-          # FINAL = 60%.
+          # v10 uses 60%.
           #
-          # 0.60 x 0.60 = 36% of native pixel work.
-          # ------------------------------------------------------
+          # This renders about 36% as many pixels as native.
+          # ======================================================
 
           if (
               "targetScale *= 0.72f;"
@@ -372,7 +388,7 @@ jobs:
               )
 
               print(
-                  "Framebuffer 72% -> 60%."
+                  "Framebuffer scale changed 72% -> 60%."
               )
 
           elif (
@@ -381,18 +397,18 @@ jobs:
           ):
 
               print(
-                  "Framebuffer already 60%."
+                  "Framebuffer already at 60%."
               )
 
           else:
 
               raise SystemExit(
-                  "ERROR: render scale patch missing"
+                  "ERROR: existing render scale patch missing"
               )
 
-          # ------------------------------------------------------
-          # 3. FORCE HIGH RES OFF
-          # ------------------------------------------------------
+          # ======================================================
+          # 3. FORCE HIGH-RES OPTION OFF
+          # ======================================================
 
           highres_pattern = re.compile(
               r'static\s+bool\s+'
@@ -402,236 +418,42 @@ jobs:
               re.DOTALL
           )
 
-          highres_new = '''static bool bsLoadHighResEnabled(void) {
+          highres_replacement = '''static bool bsLoadHighResEnabled(void) {
               return false;
           }'''
 
-          s2, count = highres_pattern.subn(
-              highres_new,
-              s,
-              count=1
+          s2, count = (
+              highres_pattern.subn(
+                  highres_replacement,
+                  s,
+                  count=1
+              )
           )
 
           if count == 1:
+
               s = s2
-              print(
-                  "High resolution forced OFF."
-              )
-
-          # ------------------------------------------------------
-          # 4. AUTOMATIC GAME INSTALLER
-          #
-          # Only insert if old installer isn't present.
-          # ------------------------------------------------------
-
-          if (
-              @"Super R-R installed."
-              if False
-              else False
-          ):
-              pass
-
-          if (
-              '@"Super R-R installed."'
-              not in s
-          ):
-
-              needle = (
-                  "    gameListVC = "
-                  "[[BSGameListViewController "
-                  "alloc] init];"
-              )
-
-              if needle not in s:
-                  raise SystemExit(
-                      "ERROR: gameListVC marker missing"
-                  )
-
-              installer = r'''
-              @autoreleasepool {
-
-                  NSFileManager *fm =
-                      [NSFileManager defaultManager];
-
-                  NSArray *roots =
-                      bsGamesRootsToScan();
-
-                  if ([roots count] > 0) {
-
-                      NSString *root =
-                          [roots objectAtIndex:0];
-
-                      NSString *gamesDir =
-                          [root
-                              stringByAppendingPathComponent:
-                                  @"games"];
-
-                      NSString *gameDest =
-                          [gamesDir
-                              stringByAppendingPathComponent:
-                                  @"Super R-R"];
-
-                      NSString *dataDest =
-                          [gameDest
-                              stringByAppendingPathComponent:
-                                  @"data.win"];
-
-                      if (![fm
-                          fileExistsAtPath:
-                              dataDest]) {
-
-                          NSString *source =
-                              [[[NSBundle mainBundle]
-                                  resourcePath]
-                                  stringByAppendingPathComponent:
-                                      @"BundledGame"];
-
-                          [fm
-                              createDirectoryAtPath:
-                                  gamesDir
-                              withIntermediateDirectories:
-                                  YES
-                              attributes:
-                                  nil
-                              error:
-                                  nil];
-
-                          NSError *copyError =
-                              nil;
-
-                          if (![fm
-                              copyItemAtPath:
-                                  source
-                              toPath:
-                                  gameDest
-                              error:
-                                  &copyError]) {
-
-                              NSLog(
-                                  @"Super R-R copy failed: %@",
-                                  copyError
-                              );
-
-                          } else {
-
-                              NSLog(
-                                  @"Super R-R installed."
-                              );
-                          }
-                      }
-                  }
-              }
-
-              gameListVC =
-                  [[BSGameListViewController alloc]
-                      init];'''
-
-              s = s.replace(
-                  needle,
-                  installer,
-                  1
-              )
 
               print(
-                  "Automatic installer added."
+                  "High-resolution mode forced OFF."
               )
 
           else:
 
               print(
-                  "Automatic installer already present."
+                  "High-resolution function not changed."
               )
 
-          main.write_text(s)
-
-          # ======================================================
-          # LOOP.C
-          # ======================================================
-
-          l = loop.read_text()
-
-          # We do not use physical gamepads,
-          # so avoid their per-frame bookkeeping.
-          gamepad_line = (
-              "            "
-              "RunnerGamepad_beginFrame"
-              "(runner->gamepads);\n"
+          main.write_text(
+              s
           )
-
-          if gamepad_line in l:
-
-              l = l.replace(
-                  gamepad_line,
-                  "",
-                  1
-              )
-
-              print(
-                  "Gamepad frame bookkeeping OFF."
-              )
-
-          loop.write_text(l)
-
-          # ======================================================
-          # MATH COMPATIBILITY
-          # ======================================================
-
-          m = math.read_text()
-
-          if (
-              "#undef NO_FABSF"
-              not in m
-          ):
-
-              marker = (
-                  '#include "real_type.h"'
-              )
-
-              if marker not in m:
-                  raise SystemExit(
-                      "ERROR: real_type include missing"
-                  )
-
-              fix = '''#include "real_type.h"
-
-          /*
-           * iOS already supplies these.
-           */
-          #if defined(__APPLE__)
-          #undef NO_LROUND
-          #undef NO_SQRTF
-          #undef NO_FABSF
-          #undef NO_FMODF
-          #undef NO_SINF
-          #undef NO_COSF
-          #undef NO_FLOORF
-          #undef NO_ROUNDF
-          #endif'''
-
-              m = m.replace(
-                  marker,
-                  fix,
-                  1
-              )
-
-              math.write_text(m)
-
-              print(
-                  "iOS math fix installed."
-              )
-
-          else:
-
-              print(
-                  "iOS math fix already present."
-              )
 
           print("")
           print(
               "======================================"
           )
           print(
-              "FINAL MAX FPS SOURCE READY"
+              "FINAL MAX FPS TUNING APPLIED"
           )
           print(
               "======================================"
@@ -639,7 +461,7 @@ jobs:
           PY
 
       # ==========================================================
-      # VERIFY FINAL SOURCE
+      # VERIFY
       # ==========================================================
 
       - name: Verify FINAL patches
@@ -656,42 +478,49 @@ jobs:
 
           echo
           echo "Modern GL:"
+
           grep -n \
             "return BS_RENDERER_MODERN_GL" \
             "$MAIN"
 
           echo
-          echo "60% render scale:"
+          echo "60% framebuffer:"
+
           grep -n \
             "targetScale \*= 0.60f" \
             "$MAIN"
 
           echo
           echo "R:"
+
           grep -n \
             "key:'R'" \
             "$MAIN"
 
           echo
           echo "LOOK:"
+
           grep -n \
             'label:@"LOOK"' \
             "$MAIN"
 
           echo
           echo "LOCK:"
+
           grep -n \
             'label:@"LOCK"' \
             "$MAIN"
 
           echo
           echo "PAUSE:"
+
           grep -n \
             'label:@"II"' \
             "$MAIN"
 
           echo
-          echo "FPS:"
+          echo "FPS counter:"
+
           grep -n \
             "bsDisplayedFPS" \
             "$MAIN" \
@@ -699,13 +528,15 @@ jobs:
 
           echo
           echo "RIGHT LOOK:"
+
           grep -n \
             "BSLookPad" \
             "$MAIN" \
             | head
 
           echo
-          echo "Installer:"
+          echo "Bundled installer:"
+
           grep -n \
             "Super R-R installed" \
             "$MAIN"
@@ -716,7 +547,10 @@ jobs:
           echo "======================================"
 
       # ==========================================================
-      # PREPARE CPU FLAGS
+      # A14 OPTIMIZATION
+      #
+      # Use it only if the installed clang supports it.
+      # Otherwise safely stay generic ARM64.
       # ==========================================================
 
       - name: Detect Apple A14 compiler tuning
@@ -724,7 +558,9 @@ jobs:
         run: |
           set -e
 
-          cat > "$RUNNER_TEMP/a14-test.c" <<'EOF'
+          cat > \
+            "$RUNNER_TEMP/a14-test.c" \
+            <<'EOF'
           int main(void) {
               return 0;
           }
@@ -742,12 +578,15 @@ jobs:
 
             CPU_FLAGS="-mcpu=apple-a14 -mtune=apple-a14"
 
+            echo
             echo "Apple A14 tuning supported."
 
           else
 
-            echo "Apple A14 tuning not supported."
+            echo
+            echo "Apple A14 tuning unavailable."
             echo "Using generic ARM64 safely."
+
           fi
 
           echo "CPU_FLAGS=$CPU_FLAGS" \
@@ -765,16 +604,12 @@ jobs:
           make distclean || true
 
       # ==========================================================
-      # FINAL PERFORMANCE BUILD
+      # FINAL RELEASE BUILD
       #
-      # IMPORTANT:
+      # NO DIAGNOSTIC PROFILER.
+      # NO PROFILER FILE.
       #
-      # GML profiler = COMPILED OUT
-      # Opcode profiler = COMPILED OUT
-      # Tracing = COMPILED OUT
-      # Stub logging = COMPILED OUT
-      #
-      # No diagnostic overhead at all.
+      # We want minimum runtime overhead now.
       # ==========================================================
 
       - name: Build FINAL MAX FPS
@@ -803,21 +638,24 @@ jobs:
           echo
           echo "ARM64"
           echo "CPU flags: $CPU_FLAGS"
+          echo
           echo "Modern GL forced"
-          echo "Software renderer avoided"
           echo "60% framebuffer"
           echo "High resolution OFF"
-          echo "GameController polling OFF"
-          echo "GML profiler COMPLETELY OFF"
-          echo "Opcode profiler COMPLETELY OFF"
-          echo "VM tracing COMPLETELY OFF"
-          echo "Stub logs COMPLETELY OFF"
+          echo "Controller polling OFF"
+          echo
+          echo "GML profiler COMPILED OUT"
+          echo "Opcode profiler COMPILED OUT"
+          echo "Tracing COMPILED OUT"
+          echo "Stub logs COMPILED OUT"
+          echo
           echo "O3"
           echo "Thin LTO"
-          echo "frame pointer OFF"
-          echo "math errno OFF"
+          echo "Frame pointer OFF"
+          echo "Math errno OFF"
           echo "FP contraction FAST"
           echo
+          echo "======================================"
 
           make \
             -j4 \
@@ -855,7 +693,6 @@ jobs:
                   -200 \
               || true
 
-            echo
             echo "======================================"
 
             exit "$STATUS"
@@ -863,7 +700,7 @@ jobs:
 
           echo
           echo "======================================"
-          echo "FINAL BUILD FINISHED"
+          echo "BUILD FINISHED"
           echo "======================================"
 
           find build \
@@ -889,10 +726,12 @@ jobs:
 
           echo
           echo "Binary:"
+
           file "$BIN"
 
           echo
           echo "Architecture:"
+
           lipo \
             -info \
             "$BIN" \
@@ -900,12 +739,14 @@ jobs:
 
           echo
           echo "IPA:"
+
           ls \
             -lh \
             "$IPA"
 
           echo
-          echo "Bundled game:"
+          echo "Bundled data.win:"
+
           unzip \
             -l \
             "$IPA" \
@@ -914,7 +755,7 @@ jobs:
                 "BundledGame/data.win"
 
       # ==========================================================
-      # OUTPUT
+      # PREPARE OUTPUT
       # ==========================================================
 
       - name: Prepare FINAL IPA
@@ -936,74 +777,91 @@ jobs:
           FINAL MAX FPS v10
           ===================
 
-          THIS IS THE FINAL PERFORMANCE BUILD.
-
-
           PERFORMANCE
           -----------
 
           Modern GL forced
 
-          Software renderer avoided
-
           ARM64
 
-          Apple A14 tuning when supported
+          Apple A14 tuning
+          when compiler supports it
 
           O3
 
           Thin LTO
 
-          60% framebuffer
+          60 percent internal framebuffer
 
           High-resolution mode OFF
 
-          GameController polling OFF
+          Physical controller polling OFF
 
-          GML profiler COMPLETELY REMOVED
+          GML profiler compiled out
 
-          Opcode profiler COMPLETELY REMOVED
+          Opcode profiler compiled out
 
-          VM tracing COMPLETELY REMOVED
+          VM tracing compiled out
 
-          Stub logging COMPLETELY REMOVED
+          Stub logging compiled out
 
 
           CONTROLS
           --------
 
           LEFT STICK
+
           movement
 
+
           RIGHT LOOK
+
           look / aim
 
+
           TOUCH GAME AREA
+
           direct aim
 
+
           A
+
           shoot / punch / Enter
 
+
           X
+
           pickup / throw
 
+
           C
+
           interaction
 
+
           R
+
           restart
 
+
           LOOK
+
           Shift
 
+
           LOCK
+
           middle mouse
 
+
           II
+
           pause
 
+
           FPS
-          frame counter
+
+          real FPS counter
 
 
           TEST
@@ -1014,16 +872,6 @@ jobs:
           2. Normal level
 
           3. Fight with several enemies
-
-
-          TARGET
-          ------
-
-          MASKS:
-          30-60 FPS
-
-          LEVEL:
-          45-60 FPS
 
 
           IPA is unsigned/ad-hoc.
