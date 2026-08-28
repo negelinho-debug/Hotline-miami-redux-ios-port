@@ -1,4 +1,4 @@
-name: Super Redux-Redux iOS FPS Diagnosis v9
+name: Super Redux-Redux iOS FPS Diagnosis v9 FIXED
 
 on:
   workflow_dispatch:
@@ -132,13 +132,16 @@ jobs:
                   --is-ancestor \
                   "$C" \
                   HEAD 2>/dev/null; then
+
                 echo "$C already included"
                 continue
               fi
 
               if ! git cherry-pick "$C"; then
+
                 git cherry-pick --abort || true
                 git reset --hard "$GL_BEFORE"
+
                 GL_OK=0
                 break
               fi
@@ -151,6 +154,7 @@ jobs:
             fi
 
           else
+
             git reset --hard "$GL_BEFORE"
             echo "GL optimization unavailable."
           fi
@@ -176,13 +180,16 @@ jobs:
                   --is-ancestor \
                   "$C" \
                   HEAD 2>/dev/null; then
+
                 echo "$C already included"
                 continue
               fi
 
               if ! git cherry-pick "$C"; then
+
                 git cherry-pick --abort || true
                 git reset --hard "$VM_BEFORE"
+
                 VM_OK=0
                 break
               fi
@@ -195,6 +202,7 @@ jobs:
             fi
 
           else
+
             git reset --hard "$VM_BEFORE"
             echo "VM optimization unavailable."
           fi
@@ -212,8 +220,13 @@ jobs:
 
           xcodebuild -version
 
-          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
-          CLANG="$(xcrun --sdk iphoneos --find clang)"
+          SDK="$(xcrun \
+            --sdk iphoneos \
+            --show-sdk-path)"
+
+          CLANG="$(xcrun \
+            --sdk iphoneos \
+            --find clang)"
 
           cat > "$RUNNER_TEMP/ios-clang" <<EOF
           #!/bin/bash
@@ -230,7 +243,7 @@ jobs:
             >> "$GITHUB_ENV"
 
       # ==========================================================
-      # APP INFO + FILE SHARING
+      # APP INFO
       # ==========================================================
 
       - name: Set app info
@@ -293,6 +306,9 @@ jobs:
           echo "Bundled:"
           du -sh "$BUNDLED"
 
+          echo "Files:"
+          find "$BUNDLED" -type f | wc -l
+
       # ==========================================================
       # REDUX RENDERING
       # ==========================================================
@@ -313,7 +329,9 @@ jobs:
           room_marker = "// ===[ ROOM FUNCTIONS ]==="
 
           if room_marker not in s:
-              raise SystemExit("ERROR: room marker not found")
+              raise SystemExit(
+                  "ERROR: room marker not found"
+              )
 
           extra = r'''
           static RValue builtin_d3d_set_projection_ortho(
@@ -330,11 +348,20 @@ jobs:
                   runner->renderer == nullptr)
                   return RValue_makeUndefined();
 
-              float x = (float)RValue_toReal(args[0]);
-              float y = (float)RValue_toReal(args[1]);
-              float width = (float)RValue_toReal(args[2]);
-              float height = (float)RValue_toReal(args[3]);
-              float angle = (float)RValue_toReal(args[4]);
+              float x =
+                  (float)RValue_toReal(args[0]);
+
+              float y =
+                  (float)RValue_toReal(args[1]);
+
+              float width =
+                  (float)RValue_toReal(args[2]);
+
+              float height =
+                  (float)RValue_toReal(args[3]);
+
+              float angle =
+                  (float)RValue_toReal(args[4]);
 
               if (width <= 0.0f ||
                   height <= 0.0f)
@@ -401,26 +428,56 @@ jobs:
               RoomView* v =
                   &room->views[viewId];
 
-              v->enabled = RValue_toBool(args[2]);
-              v->viewX = RValue_toInt32(args[3]);
-              v->viewY = RValue_toInt32(args[4]);
-              v->viewWidth = RValue_toInt32(args[5]);
-              v->viewHeight = RValue_toInt32(args[6]);
-              v->portX = RValue_toInt32(args[7]);
-              v->portY = RValue_toInt32(args[8]);
-              v->portWidth = RValue_toInt32(args[9]);
-              v->portHeight = RValue_toInt32(args[10]);
-              v->borderX = (uint32_t)RValue_toInt32(args[11]);
-              v->borderY = (uint32_t)RValue_toInt32(args[12]);
-              v->speedX = RValue_toInt32(args[13]);
-              v->speedY = RValue_toInt32(args[14]);
-              v->objectId = RValue_toInt32(args[15]);
+              v->enabled =
+                  RValue_toBool(args[2]);
+
+              v->viewX =
+                  RValue_toInt32(args[3]);
+
+              v->viewY =
+                  RValue_toInt32(args[4]);
+
+              v->viewWidth =
+                  RValue_toInt32(args[5]);
+
+              v->viewHeight =
+                  RValue_toInt32(args[6]);
+
+              v->portX =
+                  RValue_toInt32(args[7]);
+
+              v->portY =
+                  RValue_toInt32(args[8]);
+
+              v->portWidth =
+                  RValue_toInt32(args[9]);
+
+              v->portHeight =
+                  RValue_toInt32(args[10]);
+
+              v->borderX =
+                  (uint32_t)
+                  RValue_toInt32(args[11]);
+
+              v->borderY =
+                  (uint32_t)
+                  RValue_toInt32(args[12]);
+
+              v->speedX =
+                  RValue_toInt32(args[13]);
+
+              v->speedY =
+                  RValue_toInt32(args[14]);
+
+              v->objectId =
+                  RValue_toInt32(args[15]);
 
               if (v->enabled)
                   room->flags |= 1;
 
               if (runner != nullptr &&
-                  runner->currentRoomIndex == roomId) {
+                  runner->currentRoomIndex ==
+                      roomId) {
 
                   runner->viewsEnabled =
                       (room->flags & 1) != 0;
@@ -428,27 +485,62 @@ jobs:
                   RuntimeView* rv =
                       &runner->views[viewId];
 
-                  rv->enabled = v->enabled;
-                  rv->portX = v->portX;
-                  rv->portY = v->portY;
-                  rv->portWidth = v->portWidth;
-                  rv->portHeight = v->portHeight;
-                  rv->cameraId = viewId;
+                  rv->enabled =
+                      v->enabled;
+
+                  rv->portX =
+                      v->portX;
+
+                  rv->portY =
+                      v->portY;
+
+                  rv->portWidth =
+                      v->portWidth;
+
+                  rv->portHeight =
+                      v->portHeight;
+
+                  rv->cameraId =
+                      viewId;
 
                   GMLCamera* camera =
-                      &runner->defaultCameras[viewId];
+                      &runner
+                          ->defaultCameras[
+                              viewId
+                          ];
 
-                  camera->allocated = true;
-                  camera->viewX = (float)v->viewX;
-                  camera->viewY = (float)v->viewY;
-                  camera->viewWidth = v->viewWidth;
-                  camera->viewHeight = v->viewHeight;
-                  camera->borderX = v->borderX;
-                  camera->borderY = v->borderY;
-                  camera->speedX = v->speedX;
-                  camera->speedY = v->speedY;
-                  camera->objectId = v->objectId;
-                  camera->viewAngle = 0.0f;
+                  camera->allocated =
+                      true;
+
+                  camera->viewX =
+                      (float)v->viewX;
+
+                  camera->viewY =
+                      (float)v->viewY;
+
+                  camera->viewWidth =
+                      v->viewWidth;
+
+                  camera->viewHeight =
+                      v->viewHeight;
+
+                  camera->borderX =
+                      v->borderX;
+
+                  camera->borderY =
+                      v->borderY;
+
+                  camera->speedX =
+                      v->speedX;
+
+                  camera->speedY =
+                      v->speedY;
+
+                  camera->objectId =
+                      v->objectId;
+
+                  camera->viewAngle =
+                      0.0f;
 
                   Runner_updateCameraViewSimple(
                       camera
@@ -462,11 +554,15 @@ jobs:
 
           s = s.replace(
               room_marker,
-              extra + "\n" + room_marker,
+              extra +
+              "\n" +
+              room_marker,
               1
           )
 
-          display_marker = "// Display stubs"
+          display_marker = (
+              "// Display stubs"
+          )
 
           if display_marker not in s:
               raise SystemExit(
@@ -479,64 +575,90 @@ jobs:
               MAYBE_UNUSED RValue* args,
               MAYBE_UNUSED int32_t argCount
           ) {
-              Runner* runner = ctx->runner;
+              Runner* runner =
+                  ctx->runner;
 
               if (runner == nullptr ||
                   runner->mouse == nullptr)
-                  return RValue_makeReal(320.0);
+                  return RValue_makeReal(
+                      320.0
+                  );
 
               return RValue_makeReal(
-                  runner->mouse->normalizedX * 640.0
+                  runner
+                      ->mouse
+                      ->normalizedX *
+                  640.0
               );
           }
+
 
           static RValue builtin_display_mouse_get_y(
               VMContext* ctx,
               MAYBE_UNUSED RValue* args,
               MAYBE_UNUSED int32_t argCount
           ) {
-              Runner* runner = ctx->runner;
+              Runner* runner =
+                  ctx->runner;
 
               if (runner == nullptr ||
                   runner->mouse == nullptr)
-                  return RValue_makeReal(240.0);
+                  return RValue_makeReal(
+                      240.0
+                  );
 
               return RValue_makeReal(
-                  runner->mouse->normalizedY * 480.0
+                  runner
+                      ->mouse
+                      ->normalizedY *
+                  480.0
               );
           }
+
 
           static RValue builtin_window_mouse_get_x(
               VMContext* ctx,
               MAYBE_UNUSED RValue* args,
               MAYBE_UNUSED int32_t argCount
           ) {
-              Runner* runner = ctx->runner;
+              Runner* runner =
+                  ctx->runner;
 
               if (runner == nullptr ||
                   runner->mouse == nullptr)
-                  return RValue_makeReal(0.0);
+                  return RValue_makeReal(
+                      0.0
+                  );
 
               return RValue_makeReal(
-                  runner->mouse->screenX
+                  runner
+                      ->mouse
+                      ->screenX
               );
           }
+
 
           static RValue builtin_window_mouse_get_y(
               VMContext* ctx,
               MAYBE_UNUSED RValue* args,
               MAYBE_UNUSED int32_t argCount
           ) {
-              Runner* runner = ctx->runner;
+              Runner* runner =
+                  ctx->runner;
 
               if (runner == nullptr ||
                   runner->mouse == nullptr)
-                  return RValue_makeReal(0.0);
+                  return RValue_makeReal(
+                      0.0
+                  );
 
               return RValue_makeReal(
-                  runner->mouse->screenY
+                  runner
+                      ->mouse
+                      ->screenY
               );
           }
+
 
           static RValue builtin_window_mouse_set(
               MAYBE_UNUSED VMContext* ctx,
@@ -550,64 +672,66 @@ jobs:
 
           s = s.replace(
               display_marker,
-              mouse_code + "\n" + display_marker,
+              mouse_code +
+              "\n" +
+              display_marker,
               1
           )
 
-          a = (
+          reg = (
               'VM_registerBuiltin(ctx, '
               '"matrix_build_projection_ortho", '
               'builtin_matrix_build_projection_ortho);'
           )
 
-          if a not in s:
+          if reg not in s:
               raise SystemExit(
                   "ERROR: matrix registration missing"
               )
 
           s = s.replace(
-              a,
-              a + '\n'
+              reg,
+              reg + '\n'
               '    VM_registerBuiltin(ctx, '
               '"d3d_set_projection_ortho", '
               'builtin_d3d_set_projection_ortho);',
               1
           )
 
-          a = (
+          reg = (
               'VM_registerBuiltin(ctx, '
               '"room_exists", '
               'builtin_room_exists);'
           )
 
-          if a not in s:
+          if reg not in s:
               raise SystemExit(
                   "ERROR: room registration missing"
               )
 
           s = s.replace(
-              a,
-              a + '\n'
+              reg,
+              reg + '\n'
               '    VM_registerBuiltin(ctx, '
               '"room_set_view", '
               'builtin_room_set_view);',
               1
           )
 
-          a = (
+          reg = (
               'VM_registerBuiltin(ctx, '
               '"display_get_height", '
               'builtin_display_get_height);'
           )
 
-          if a not in s:
+          if reg not in s:
               raise SystemExit(
                   "ERROR: display registration missing"
               )
 
           s = s.replace(
-              a,
-              a + '\n'
+              reg,
+              reg + '\n'
               '    VM_registerBuiltin(ctx, '
               '"display_mouse_get_x", '
               'builtin_display_mouse_get_x);\n'
@@ -628,11 +752,13 @@ jobs:
 
           p.write_text(s)
 
-          print("Rendering patch complete.")
+          print(
+              "Rendering patch complete."
+          )
           PY
 
       # ==========================================================
-      # BASE MOBILE CONTROLS
+      # GAMEPLAY CONTROLS
       # ==========================================================
 
       - name: Patch Redux gameplay controls
@@ -645,7 +771,10 @@ jobs:
           python3 <<'PY'
           from pathlib import Path
 
-          p = Path("Butterscotch/src/ios/main.c")
+          p = Path(
+              "Butterscotch/src/ios/main.c"
+          )
+
           s = p.read_text()
 
           marker = '''/* ---------------------------------------------------------------------
@@ -665,7 +794,9 @@ jobs:
           } BSMouseEvent;
 
           static BSMouseEvent
-              bsMouseQueue[BS_MOUSE_QUEUE_SIZE];
+              bsMouseQueue[
+                  BS_MOUSE_QUEUE_SIZE
+              ];
 
           static atomic_int
               bsMouseQueueHead = 0;
@@ -679,25 +810,34 @@ jobs:
           static _Atomic double
               bsTouchMouseY = 240.0;
 
+
           static void bsEnqueueMouseEvent(
               int32_t button,
               bool isDown
           ) {
               int head =
-                  atomic_load(&bsMouseQueueHead);
+                  atomic_load(
+                      &bsMouseQueueHead
+                  );
 
               int next =
                   (head + 1) %
                   BS_MOUSE_QUEUE_SIZE;
 
               if (next ==
-                  atomic_load(&bsMouseQueueTail))
+                  atomic_load(
+                      &bsMouseQueueTail
+                  ))
                   return;
 
-              bsMouseQueue[head].button =
+              bsMouseQueue[
+                  head
+              ].button =
                   button;
 
-              bsMouseQueue[head].isDown =
+              bsMouseQueue[
+                  head
+              ].isDown =
                   isDown;
 
               atomic_store(
@@ -706,8 +846,10 @@ jobs:
               );
           }
 
-          static void bsDrainMouseEvents(void) {
 
+          static void bsDrainMouseEvents(
+              void
+          ) {
               for (;;) {
 
                   int tail =
@@ -722,7 +864,9 @@ jobs:
                       break;
 
                   BSMouseEvent ev =
-                      bsMouseQueue[tail];
+                      bsMouseQueue[
+                          tail
+                      ];
 
                   atomic_store(
                       &bsMouseQueueTail,
@@ -733,16 +877,17 @@ jobs:
                   if (g_runner &&
                       g_runner->mouse) {
 
-                      if (ev.isDown)
+                      if (ev.isDown) {
                           RunnerMouse_onButtonDown(
                               g_runner->mouse,
                               ev.button
                           );
-                      else
+                      } else {
                           RunnerMouse_onButtonUp(
                               g_runner->mouse,
                               ev.button
                           );
+                      }
                   }
               }
           }
@@ -751,7 +896,8 @@ jobs:
 
           s = s.replace(
               marker,
-              mouse_queue + marker,
+              mouse_queue +
+              marker,
               1
           )
 
@@ -814,29 +960,45 @@ jobs:
                   return;
 
               CGFloat nx =
-                  (p.x - gameFrame.origin.x) /
+                  (p.x -
+                   gameFrame.origin.x) /
                   gameFrame.size.width;
 
               CGFloat ny =
-                  (p.y - gameFrame.origin.y) /
+                  (p.y -
+                   gameFrame.origin.y) /
                   gameFrame.size.height;
 
-              if (nx < 0.0f) nx = 0.0f;
-              if (nx > 1.0f) nx = 1.0f;
-              if (ny < 0.0f) ny = 0.0f;
-              if (ny > 1.0f) ny = 1.0f;
+              if (nx < 0.0f)
+                  nx = 0.0f;
+
+              if (nx > 1.0f)
+                  nx = 1.0f;
+
+              if (ny < 0.0f)
+                  ny = 0.0f;
+
+              if (ny > 1.0f)
+                  ny = 1.0f;
 
               CGRect screen =
-                  [[UIScreen mainScreen] bounds];
+                  [[UIScreen mainScreen]
+                      bounds];
 
               atomic_store(
                   &bsTouchMouseX,
-                  (double)(nx * screen.size.width)
+                  (double)(
+                      nx *
+                      screen.size.width
+                  )
               );
 
               atomic_store(
                   &bsTouchMouseY,
-                  (double)(ny * screen.size.height)
+                  (double)(
+                      ny *
+                      screen.size.height
+                  )
               );
           }
 
@@ -844,7 +1006,8 @@ jobs:
 
           s = s.replace(
               action_marker,
-              helper + action_marker,
+              helper +
+              action_marker,
               1
           )
 
@@ -875,7 +1038,8 @@ jobs:
 
           s = s.replace(
               interface_marker,
-              interface + interface_marker,
+              interface +
+              interface_marker,
               1
           )
 
@@ -902,7 +1066,11 @@ jobs:
                   "ERROR: overlay marker missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           old = '''        _actionButtons[0] = [[BSKeyButton alloc] initWithFrame:CGRectZero key:'Z' label:@"Z" font:18.0f hitExpansion:6.0f];
                   _actionButtons[1] = [[BSKeyButton alloc] initWithFrame:CGRectZero key:'X' label:@"X" font:18.0f hitExpansion:6.0f];
@@ -939,7 +1107,11 @@ jobs:
                   "ERROR: original buttons missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           old_dpad = (
               'static const int32_t keys[4] = '
@@ -964,9 +1136,11 @@ jobs:
           new = '''        BOOL actionHandled = NO;
 
                   for (int i = 0; i < 3; i++) {
+
                       if ([_actionButtons[i]
                               handleTouchBegan:touch
                               point:p]) {
+
                           actionHandled = YES;
                           break;
                       }
@@ -976,7 +1150,9 @@ jobs:
                       continue;
 
                   BSLayout layout =
-                      computeLayout(self.bounds.size);
+                      computeLayout(
+                          self.bounds.size
+                      );
 
                   if (!_aimTouch &&
                       CGRectContainsPoint(
@@ -998,7 +1174,11 @@ jobs:
                   "ERROR: touch begin missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           old = '''    for (UITouch *touch in touches) {
                   CGPoint p = [touch locationInView:self];
@@ -1040,7 +1220,11 @@ jobs:
                   "ERROR: touch move missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           old = '''        for (int i = 0; i < 3; i++) {
                       if ([_actionButtons[i] handleTouchEnded:touch]) break;
@@ -1049,8 +1233,10 @@ jobs:
           new = '''        BOOL actionEnded = NO;
 
                   for (int i = 0; i < 3; i++) {
+
                       if ([_actionButtons[i]
                               handleTouchEnded:touch]) {
+
                           actionEnded = YES;
                           break;
                       }
@@ -1060,6 +1246,7 @@ jobs:
                       continue;
 
                   if (touch == _aimTouch) {
+
                       [_aimTouch release];
                       _aimTouch = nil;
                   }'''
@@ -1069,7 +1256,11 @@ jobs:
                   "ERROR: touch end missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           old = '''    for (int i = 0; i < 3; i++) [_actionButtons[i] release];
               [super dealloc];'''
@@ -1087,9 +1278,15 @@ jobs:
                   "ERROR: dealloc missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
-          marker2 = '@implementation BSToggleKeyButton'
+          marker2 = (
+              '@implementation BSToggleKeyButton'
+          )
 
           impl = r'''
           @implementation BSActionButton
@@ -1107,14 +1304,19 @@ jobs:
                                  font:fontSize
                          hitExpansion:expansion])) {
 
-                  _mouseButton = mouseButton;
-                  _key = key;
+                  _mouseButton =
+                      mouseButton;
+
+                  _key =
+                      key;
               }
 
               return self;
           }
 
+
           - (void)onPress {
+
               [super onPress];
 
               if (_key >= 0)
@@ -1123,14 +1325,17 @@ jobs:
                       true
                   );
 
-              if (_mouseButton > GML_MB_NONE)
+              if (_mouseButton >
+                  GML_MB_NONE)
                   bsEnqueueMouseEvent(
                       _mouseButton,
                       true
                   );
           }
 
+
           - (void)onRelease {
+
               [super onRelease];
 
               if (_key >= 0)
@@ -1139,7 +1344,8 @@ jobs:
                       false
                   );
 
-              if (_mouseButton > GML_MB_NONE)
+              if (_mouseButton >
+                  GML_MB_NONE)
                   bsEnqueueMouseEvent(
                       _mouseButton,
                       false
@@ -1157,17 +1363,20 @@ jobs:
 
           s = s.replace(
               marker2,
-              impl + marker2,
+              impl +
+              marker2,
               1
           )
 
           p.write_text(s)
 
-          print("Touch controls complete.")
+          print(
+              "Touch controls complete."
+          )
           PY
 
       # ==========================================================
-      # R / LOOK / LOCK
+      # R LOOK LOCK
       # ==========================================================
 
       - name: Add R LOOK LOCK
@@ -1180,7 +1389,10 @@ jobs:
           python3 <<'PY'
           from pathlib import Path
 
-          p = Path("Butterscotch/src/ios/main.c")
+          p = Path(
+              "Butterscotch/src/ios/main.c"
+          )
+
           s = p.read_text()
 
           old = '''static bool bsLoadHighResEnabled(void) {
@@ -1192,7 +1404,11 @@ jobs:
           }'''
 
           if old in s:
-              s = s.replace(old, new, 1)
+              s = s.replace(
+                  old,
+                  new,
+                  1
+              )
 
           if 'BSToggleKeyButton *_ffButton;' not in s:
               raise SystemExit(
@@ -1219,7 +1435,11 @@ jobs:
                   "ERROR: ff init missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           old = '''    UITouch          *_aimTouch;'''
 
@@ -1232,7 +1452,11 @@ jobs:
                   "ERROR: aim field missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           old = '''        _aimTouch = nil;'''
 
@@ -1258,7 +1482,11 @@ jobs:
                   "ERROR: aim init missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           old = '''    _ffButton.frame = layout.ffFrame;'''
 
@@ -1290,7 +1518,11 @@ jobs:
                   "ERROR: layout missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           old = '''    [_ffButton drawInContext:ctx];'''
 
@@ -1303,7 +1535,11 @@ jobs:
                   "ERROR: draw missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           old = '''        if ([_ffButton handleTouchBegan:touch point:p]) continue;
                   if ([_dpad handleTouchBegan:touch point:p]) continue;'''
@@ -1318,7 +1554,11 @@ jobs:
                   "ERROR: begin missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           old = '''        if ([_ffButton handleTouchEnded:touch]) continue;'''
 
@@ -1331,7 +1571,11 @@ jobs:
                   "ERROR: end missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           old = '''    [_ffButton release];'''
 
@@ -1344,15 +1588,21 @@ jobs:
                   "ERROR: ff dealloc missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           p.write_text(s)
 
-          print("R LOOK LOCK complete.")
+          print(
+              "R LOOK LOCK complete."
+          )
           PY
 
       # ==========================================================
-      # PAUSE + FPS + RIGHT LOOK
+      # PAUSE FPS RIGHT LOOK
       # ==========================================================
 
       - name: Add PAUSE FPS and right LOOK
@@ -1365,7 +1615,10 @@ jobs:
           python3 <<'PY'
           from pathlib import Path
 
-          p = Path("Butterscotch/src/ios/main.c")
+          p = Path(
+              "Butterscotch/src/ios/main.c"
+          )
+
           s = p.read_text()
 
           old = '''static _Atomic double
@@ -1388,7 +1641,11 @@ jobs:
                   "ERROR: FPS storage missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           old = '''void platformSwapBuffers(void) {
           #ifdef ENABLE_SW_RENDERER'''
@@ -1400,30 +1657,42 @@ jobs:
               double bsNow =
                   CACurrentMediaTime();
 
-              if (bsFPSStartTime <= 0.0)
-                  bsFPSStartTime = bsNow;
+              if (bsFPSStartTime <=
+                  0.0)
+                  bsFPSStartTime =
+                      bsNow;
 
               double bsElapsed =
-                  bsNow - bsFPSStartTime;
+                  bsNow -
+                  bsFPSStartTime;
 
-              if (bsElapsed >= 0.50) {
+              if (bsElapsed >=
+                  0.50) {
 
                   int fps =
                       (int)(
-                          ((double)bsFPSFrameCount /
-                           bsElapsed) + 0.5
+                          ((double)
+                              bsFPSFrameCount /
+                           bsElapsed) +
+                          0.5
                       );
 
-                  if (fps < 0) fps = 0;
-                  if (fps > 999) fps = 999;
+                  if (fps < 0)
+                      fps = 0;
+
+                  if (fps > 999)
+                      fps = 999;
 
                   atomic_store(
                       &bsDisplayedFPS,
                       fps
                   );
 
-                  bsFPSFrameCount = 0;
-                  bsFPSStartTime = bsNow;
+                  bsFPSFrameCount =
+                      0;
+
+                  bsFPSStartTime =
+                      bsNow;
               }
 
           #ifdef ENABLE_SW_RENDERER'''
@@ -1433,7 +1702,11 @@ jobs:
                   "ERROR: swap missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           old = '''    CGRect ffFrame;
               bool   portrait;'''
@@ -1447,7 +1720,11 @@ jobs:
                   "ERROR: layout struct missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           old = '''        layout.buttonsFrame = CGRectMake(screen.width - 16 - 150, stripY + 30, 150, 50);'''
 
@@ -1455,10 +1732,13 @@ jobs:
 
                   layout.lookFrame =
                       CGRectMake(
-                          screen.width - 112.0f,
+                          screen.width -
+                              112.0f,
                           fmaxf(
-                              BS_GAME_TOP_PADDING + 10.0f,
-                              stripY - 105.0f
+                              BS_GAME_TOP_PADDING +
+                                  10.0f,
+                              stripY -
+                                  105.0f
                           ),
                           92.0f,
                           92.0f
@@ -1469,7 +1749,11 @@ jobs:
                   "ERROR: portrait layout missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           old = '''        layout.buttonsFrame = CGRectMake(screen.width - notchInset - 10 - 170, (screen.height - 130) / 2.0f + 60, 170, 60);'''
 
@@ -1491,7 +1775,11 @@ jobs:
                   "ERROR: landscape layout missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           marker = '''@interface BSTouchOverlay : UIView {'''
 
@@ -1504,15 +1792,18 @@ jobs:
 
           @property (nonatomic) CGRect frame;
 
-          - (id)initWithFrame:(CGRect)frame;
+          - (id)initWithFrame:
+              (CGRect)frame;
 
           - (BOOL)handleTouchBegan:
               (UITouch *)touch
-              point:(CGPoint)point;
+              point:
+              (CGPoint)point;
 
           - (BOOL)handleTouchMoved:
               (UITouch *)touch
-              point:(CGPoint)point;
+              point:
+              (CGPoint)point;
 
           - (BOOL)handleTouchEnded:
               (UITouch *)touch;
@@ -1532,7 +1823,8 @@ jobs:
 
           s = s.replace(
               marker,
-              look_interface + marker,
+              look_interface +
+              marker,
               1
           )
 
@@ -1549,7 +1841,11 @@ jobs:
                   "ERROR: lock field missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           old = '''    _lockButton.frame =
                   CGRectMake(
@@ -1594,38 +1890,55 @@ jobs:
                   "ERROR: lock layout missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           old = '''    _aimTouch = nil;'''
 
           new = '''    _pauseButton =
                       [[BSKeyButton alloc]
-                          initWithFrame:CGRectZero
-                          key:VK_ESCAPE
-                          label:@"II"
-                          font:13.0f
-                          hitExpansion:10.0f];
+                          initWithFrame:
+                              CGRectZero
+                          key:
+                              VK_ESCAPE
+                          label:
+                              @"II"
+                          font:
+                              13.0f
+                          hitExpansion:
+                              10.0f];
 
                   _lookPad =
                       [[BSLookPad alloc]
-                          initWithFrame:CGRectZero];
+                          initWithFrame:
+                              CGRectZero];
 
                   _fpsLabel =
                       [[UILabel alloc]
-                          initWithFrame:CGRectZero];
+                          initWithFrame:
+                              CGRectZero];
 
                   _fpsLabel.backgroundColor =
-                      [UIColor colorWithWhite:0.0
-                                        alpha:0.35];
+                      [UIColor
+                          colorWithWhite:
+                              0.0
+                          alpha:
+                              0.35];
 
                   _fpsLabel.textColor =
-                      [UIColor whiteColor];
+                      [UIColor
+                          whiteColor];
 
                   _fpsLabel.textAlignment =
                       NSTextAlignmentCenter;
 
                   _fpsLabel.font =
-                      [UIFont boldSystemFontOfSize:11.0f];
+                      [UIFont
+                          boldSystemFontOfSize:
+                              11.0f];
 
                   _fpsLabel.text =
                       @"FPS --";
@@ -1636,15 +1949,24 @@ jobs:
                   _fpsLabel.clipsToBounds =
                       YES;
 
-                  [self addSubview:_fpsLabel];
+                  [self
+                      addSubview:
+                          _fpsLabel];
 
                   _fpsTimer =
                       [[NSTimer
-                          scheduledTimerWithTimeInterval:0.50
-                          target:self
-                          selector:@selector(bsUpdateFPSLabel:)
-                          userInfo:nil
-                          repeats:YES]
+                          scheduledTimerWithTimeInterval:
+                              0.50
+                          target:
+                              self
+                          selector:
+                              @selector(
+                                  bsUpdateFPSLabel:
+                              )
+                          userInfo:
+                              nil
+                          repeats:
+                              YES]
                           retain];
 
                   _aimTouch = nil;'''
@@ -1654,7 +1976,11 @@ jobs:
                   "ERROR: aim init missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           marker = '''- (void)drawRect:(CGRect)rect {'''
 
@@ -1670,9 +1996,10 @@ jobs:
                   );
 
               _fpsLabel.text =
-                  [NSString stringWithFormat:
-                      @"FPS %d",
-                      fps];
+                  [NSString
+                      stringWithFormat:
+                          @"FPS %d",
+                          fps];
           }
 
 
@@ -1685,7 +2012,8 @@ jobs:
 
           s = s.replace(
               marker,
-              method + marker,
+              method +
+              marker,
               1
           )
 
@@ -1700,7 +2028,11 @@ jobs:
                   "ERROR: lock draw missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           old = '''        if ([_lockButton handleTouchBegan:touch point:p]) continue;
                   if ([_dpad handleTouchBegan:touch point:p]) continue;'''
@@ -1712,7 +2044,9 @@ jobs:
                           handleTouchBegan:touch
                           point:p]) {
 
-                      [self setNeedsDisplay];
+                      [self
+                          setNeedsDisplay];
+
                       continue;
                   }
 
@@ -1723,7 +2057,11 @@ jobs:
                   "ERROR: pause begin missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           old = '''        if ([_dpad
                           handleTouchMoved:touch
@@ -1758,7 +2096,11 @@ jobs:
                   "ERROR: look move missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           old = '''        if ([_lockButton handleTouchEnded:touch]) continue;'''
 
@@ -1768,7 +2110,9 @@ jobs:
                   if ([_lookPad
                           handleTouchEnded:touch]) {
 
-                      [self setNeedsDisplay];
+                      [self
+                          setNeedsDisplay];
+
                       continue;
                   }'''
 
@@ -1777,7 +2121,11 @@ jobs:
                   "ERROR: pause end missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           old = '''    [_restartButton release];
               [_lockButton release];'''
@@ -1788,23 +2136,40 @@ jobs:
               [_lookPad release];
 
               if (_fpsTimer) {
-                  [_fpsTimer invalidate];
-                  [_fpsTimer release];
-                  _fpsTimer = nil;
+
+                  [_fpsTimer
+                      invalidate];
+
+                  [_fpsTimer
+                      release];
+
+                  _fpsTimer =
+                      nil;
               }
 
-              [_fpsLabel removeFromSuperview];
-              [_fpsLabel release];
-              _fpsLabel = nil;'''
+              [_fpsLabel
+                  removeFromSuperview];
+
+              [_fpsLabel
+                  release];
+
+              _fpsLabel =
+                  nil;'''
 
           if old not in s:
               raise SystemExit(
                   "ERROR: pause dealloc missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
-          marker = '@implementation BSDpad'
+          marker = (
+              '@implementation BSDpad'
+          )
 
           impl = r'''
           @implementation BSLookPad
@@ -1815,9 +2180,15 @@ jobs:
           - (id)initWithFrame:
               (CGRect)frame {
 
-              if ((self = [super init])) {
-                  _frame = frame;
-                  _touch = nil;
+              if ((self =
+                  [super init])) {
+
+                  _frame =
+                      frame;
+
+                  _touch =
+                      nil;
+
                   _thumbOffset =
                       CGPointZero;
               }
@@ -1835,7 +2206,8 @@ jobs:
                       point
                   );
 
-              _thumbOffset = offset;
+              _thumbOffset =
+                  offset;
 
               CGFloat maxR =
                   joystickRadius(
@@ -1846,18 +2218,22 @@ jobs:
                   return;
 
               CGFloat nx =
-                  offset.x / maxR;
+                  offset.x /
+                  maxR;
 
               CGFloat ny =
-                  offset.y / maxR;
+                  offset.y /
+                  maxR;
 
               const CGFloat deadzone =
                   0.12f;
 
-              if (fabs(nx) < deadzone)
+              if (fabs(nx) <
+                  deadzone)
                   nx = 0.0f;
 
-              if (fabs(ny) < deadzone)
+              if (fabs(ny) <
+                  deadzone)
                   ny = 0.0f;
 
               CGRect screen =
@@ -1865,33 +2241,46 @@ jobs:
                       bounds];
 
               double cx =
-                  screen.size.width * 0.5;
+                  screen.size.width *
+                  0.5;
 
               double cy =
-                  screen.size.height * 0.5;
+                  screen.size.height *
+                  0.5;
 
               double radiusX =
-                  screen.size.width * 0.42;
+                  screen.size.width *
+                  0.42;
 
               double radiusY =
-                  screen.size.height * 0.42;
+                  screen.size.height *
+                  0.42;
 
               double mx =
                   cx +
-                  ((double)nx * radiusX);
+                  ((double)nx *
+                   radiusX);
 
               double my =
                   cy +
-                  ((double)ny * radiusY);
+                  ((double)ny *
+                   radiusY);
 
-              if (mx < 0.0) mx = 0.0;
-              if (my < 0.0) my = 0.0;
+              if (mx < 0.0)
+                  mx = 0.0;
 
-              if (mx > screen.size.width)
-                  mx = screen.size.width;
+              if (my < 0.0)
+                  my = 0.0;
 
-              if (my > screen.size.height)
-                  my = screen.size.height;
+              if (mx >
+                  screen.size.width)
+                  mx =
+                      screen.size.width;
+
+              if (my >
+                  screen.size.height)
+                  my =
+                      screen.size.height;
 
               atomic_store(
                   &bsTouchMouseX,
@@ -1907,7 +2296,8 @@ jobs:
 
           - (BOOL)handleTouchBegan:
               (UITouch *)touch
-              point:(CGPoint)point {
+              point:
+              (CGPoint)point {
 
               if (_touch)
                   return NO;
@@ -1925,8 +2315,9 @@ jobs:
               _touch =
                   [touch retain];
 
-              [self updateAimFromPoint:
-                  point];
+              [self
+                  updateAimFromPoint:
+                      point];
 
               return YES;
           }
@@ -1934,13 +2325,16 @@ jobs:
 
           - (BOOL)handleTouchMoved:
               (UITouch *)touch
-              point:(CGPoint)point {
+              point:
+              (CGPoint)point {
 
-              if (touch != _touch)
+              if (touch !=
+                  _touch)
                   return NO;
 
-              [self updateAimFromPoint:
-                  point];
+              [self
+                  updateAimFromPoint:
+                      point];
 
               return YES;
           }
@@ -1949,14 +2343,16 @@ jobs:
           - (BOOL)handleTouchEnded:
               (UITouch *)touch {
 
-              if (touch != _touch)
+              if (touch !=
+                  _touch)
                   return NO;
 
               _thumbOffset =
                   CGPointZero;
 
               [_touch release];
-              _touch = nil;
+              _touch =
+                  nil;
 
               return YES;
           }
@@ -2004,7 +2400,8 @@ jobs:
               );
 
               CGFloat thumbR =
-                  baseR * 0.34f;
+                  baseR *
+                  0.34f;
 
               CGFloat thumbX =
                   cx +
@@ -2016,10 +2413,14 @@ jobs:
 
               CGRect thumbRect =
                   CGRectMake(
-                      thumbX - thumbR,
-                      thumbY - thumbR,
-                      thumbR * 2.0f,
-                      thumbR * 2.0f
+                      thumbX -
+                          thumbR,
+                      thumbY -
+                          thumbR,
+                      thumbR *
+                          2.0f,
+                      thumbR *
+                          2.0f
                   );
 
               CGContextSetRGBFillColor(
@@ -2038,8 +2439,10 @@ jobs:
 
 
           - (void)dealloc {
+
               if (_touch)
-                  [_touch release];
+                  [_touch
+                      release];
 
               [super dealloc];
           }
@@ -2056,17 +2459,20 @@ jobs:
 
           s = s.replace(
               marker,
-              impl + marker,
+              impl +
+              marker,
               1
           )
 
           p.write_text(s)
 
-          print("Pause FPS right LOOK complete.")
+          print(
+              "Pause FPS right LOOK complete."
+          )
           PY
 
       # ==========================================================
-      # FORCE MODERN GL + 72% FRAMEBUFFER
+      # MODERN GL + PERFORMANCE
       # ==========================================================
 
       - name: Force Modern GL and performance mode
@@ -2080,7 +2486,10 @@ jobs:
           from pathlib import Path
           import re
 
-          p = Path("Butterscotch/src/ios/main.c")
+          p = Path(
+              "Butterscotch/src/ios/main.c"
+          )
+
           s = p.read_text()
 
           pattern = re.compile(
@@ -2121,7 +2530,11 @@ jobs:
                   "ERROR: render scale marker missing"
               )
 
-          s = s.replace(old, new, 1)
+          s = s.replace(
+              old,
+              new,
+              1
+          )
 
           old_thread = '''- (void)gameThread {
               NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];'''
@@ -2147,8 +2560,13 @@ jobs:
 
           p.write_text(s)
 
-          print("Modern GL forced.")
-          print("Framebuffer scale 72%.")
+          print(
+              "Modern GL forced."
+          )
+
+          print(
+              "Framebuffer scale 72%."
+          )
           PY
 
       # ==========================================================
@@ -2165,7 +2583,10 @@ jobs:
           python3 <<'PY'
           from pathlib import Path
 
-          p = Path("Butterscotch/src/ios/main.c")
+          p = Path(
+              "Butterscotch/src/ios/main.c"
+          )
+
           s = p.read_text()
 
           marker = '''#define BS_DEBUG_DEFAULTS_KEY   @"BSDebugMode"'''
@@ -2214,7 +2635,8 @@ jobs:
                   [[UISwitch alloc]
                       initWithFrame:CGRectZero];
 
-              [profileSwitch sizeToFit];
+              [profileSwitch
+                  sizeToFit];
 
               CGRect profilerFrame =
                   profileSwitch.frame;
@@ -2231,12 +2653,14 @@ jobs:
                   profilerFrame;
 
               profileSwitch.on =
-                  [[NSUserDefaults standardUserDefaults]
+                  [[NSUserDefaults
+                      standardUserDefaults]
                       boolForKey:
                           BS_PROFILE_DEFAULTS_KEY];
 
-              [root addSubview:
-                  profileSwitch];
+              [root
+                  addSubview:
+                      profileSwitch];
 
               UILabel *profileLabel =
                   [[[UILabel alloc]
@@ -2254,14 +2678,17 @@ jobs:
                   @"GML Profiler:";
 
               profileLabel.font =
-                  [UIFont systemFontOfSize:
-                      15.0f];
+                  [UIFont
+                      systemFontOfSize:
+                          15.0f];
 
               profileLabel.backgroundColor =
-                  [UIColor clearColor];
+                  [UIColor
+                      clearColor];
 
-              [root addSubview:
-                  profileLabel];'''
+              [root
+                  addSubview:
+                      profileLabel];'''
 
           if marker not in s:
               raise SystemExit(
@@ -2315,11 +2742,7 @@ jobs:
 
           marker = '''    args.profilerFramesBetween = 0;'''
 
-          replacement = '''    /*
-               * OFF = zero profiling overhead.
-               * ON = one report every 60 frames.
-               */
-              BOOL bsProfileEnabled =
+          replacement = '''    BOOL bsProfileEnabled =
                   [[NSUserDefaults standardUserDefaults]
                       boolForKey:
                           BS_PROFILE_DEFAULTS_KEY];
@@ -2342,11 +2765,13 @@ jobs:
 
           p.write_text(s)
 
-          print("GML profiler switch added.")
+          print(
+              "GML profiler switch added."
+          )
           PY
 
       # ==========================================================
-      # SAVE PROFILER REPORT TO FILE
+      # FIXED PROFILER FILE OUTPUT
       # ==========================================================
 
       - name: Save profiler results to Files app
@@ -2358,95 +2783,251 @@ jobs:
 
           python3 <<'PY'
           from pathlib import Path
+          import re
 
-          p = Path("Butterscotch/src/loop.c")
-          s = p.read_text()
-
-          old = '''                if (args.profilerFramesBetween > 0 && runner->frameCount > 0 && runner->frameCount % args.profilerFramesBetween == 0) {
-                      char* profilerReport = Profiler_createReport(vm->profiler, 20, args.profilerFramesBetween);
-                      if (profilerReport != nullptr) {
-                          logInfo("%s\\n", profilerReport);
-                          free(profilerReport);
-                      }
-                      Profiler_reset(vm->profiler);
-                  }'''
-
-          new = '''                if (args.profilerFramesBetween > 0 &&
-                      runner->frameCount > 0 &&
-                      runner->frameCount %
-                          args.profilerFramesBetween == 0) {
-
-                      char* profilerReport =
-                          Profiler_createReport(
-                              vm->profiler,
-                              30,
-                              args.profilerFramesBetween
-                          );
-
-                      if (profilerReport != nullptr) {
-
-                          logInfo(
-                              "%s\\n",
-                              profilerReport
-                          );
-
-                          if (args.saveFolder != nullptr) {
-
-                              char profilePath[1024];
-
-                              snprintf(
-                                  profilePath,
-                                  sizeof(profilePath),
-                                  "%s/SuperRR-profile.txt",
-                                  args.saveFolder
-                              );
-
-                              FILE* pf =
-                                  fopen(
-                                      profilePath,
-                                      "ab"
-                                  );
-
-                              if (pf != nullptr) {
-
-                                  fprintf(
-                                      pf,
-                                      "\\n========================================\\n"
-                                      "FRAME %d\\n"
-                                      "========================================\\n"
-                                      "%s\\n",
-                                      runner->frameCount,
-                                      profilerReport
-                                  );
-
-                                  fclose(pf);
-                              }
-                          }
-
-                          free(
-                              profilerReport
-                          );
-                      }
-
-                      Profiler_reset(
-                          vm->profiler
-                      );
-                  }'''
-
-          if old not in s:
-              raise SystemExit(
-                  "ERROR: profiler report block missing"
-              )
-
-          s = s.replace(
-              old,
-              new,
-              1
+          p = Path(
+              "Butterscotch/src/loop.c"
           )
 
-          p.write_text(s)
+          if not p.exists():
+              raise SystemExit(
+                  "ERROR: loop.c missing"
+              )
 
-          print("Profiler file output enabled.")
+          s = p.read_text()
+
+          #
+          # Find profiler block without depending on
+          # exact whitespace or line wrapping.
+          #
+
+          start = s.find(
+              "args.profilerFramesBetween > 0"
+          )
+
+          if start < 0:
+              start = s.find(
+                  "args.profilerFramesBetween"
+              )
+
+          if start < 0:
+              raise SystemExit(
+                  "ERROR: profilerFramesBetween missing"
+              )
+
+          if_pos = s.rfind(
+              "if",
+              max(
+                  0,
+                  start - 100
+              ),
+              start + 5
+          )
+
+          if if_pos < 0:
+              raise SystemExit(
+                  "ERROR: profiler if block start missing"
+              )
+
+          reset_pos = s.find(
+              "Profiler_reset",
+              start
+          )
+
+          if reset_pos < 0:
+              raise SystemExit(
+                  "ERROR: Profiler_reset missing"
+              )
+
+          semicolon_pos = s.find(
+              ";",
+              reset_pos
+          )
+
+          if semicolon_pos < 0:
+              raise SystemExit(
+                  "ERROR: profiler reset semicolon missing"
+              )
+
+          brace_pos = s.find(
+              "}",
+              semicolon_pos
+          )
+
+          if brace_pos < 0:
+              raise SystemExit(
+                  "ERROR: profiler block end missing"
+              )
+
+          old_block =
+              s[
+                  if_pos:
+                  brace_pos + 1
+              ]
+
+          print("")
+          print(
+              "===== ORIGINAL PROFILER BLOCK ====="
+          )
+          print(
+              old_block
+          )
+          print(
+              "==================================="
+          )
+
+          indent_match = re.match(
+              r'[ \t]*',
+              old_block
+          )
+
+          indent = (
+              indent_match.group(0)
+              if indent_match
+              else ""
+          )
+
+          new_block = f'''{indent}if (
+          {indent}    args.profilerFramesBetween > 0 &&
+          {indent}    runner->frameCount > 0 &&
+          {indent}    runner->frameCount %
+          {indent}        args.profilerFramesBetween == 0
+          {indent}) {{
+
+          {indent}    char* profilerReport =
+          {indent}        Profiler_createReport(
+          {indent}            vm->profiler,
+          {indent}            30,
+          {indent}            args.profilerFramesBetween
+          {indent}        );
+
+          {indent}    if (profilerReport != nullptr) {{
+
+          {indent}        logInfo(
+          {indent}            "%s\\\\n",
+          {indent}            profilerReport
+          {indent}        );
+
+          {indent}        if (
+          {indent}            args.saveFolder != nullptr
+          {indent}        ) {{
+
+          {indent}            char profilePath[1024];
+
+          {indent}            snprintf(
+          {indent}                profilePath,
+          {indent}                sizeof(profilePath),
+          {indent}                "%s/SuperRR-profile.txt",
+          {indent}                args.saveFolder
+          {indent}            );
+
+          {indent}            FILE* profileFile =
+          {indent}                fopen(
+          {indent}                    profilePath,
+          {indent}                    "ab"
+          {indent}                );
+
+          {indent}            if (
+          {indent}                profileFile != nullptr
+          {indent}            ) {{
+
+          {indent}                fprintf(
+          {indent}                    profileFile,
+          {indent}                    "\\\\n"
+          {indent}                    "========================================\\\\n"
+          {indent}                    "FRAME %d\\\\n"
+          {indent}                    "========================================\\\\n"
+          {indent}                    "%s\\\\n",
+          {indent}                    runner->frameCount,
+          {indent}                    profilerReport
+          {indent}                );
+
+          {indent}                fclose(
+          {indent}                    profileFile
+          {indent}                );
+          {indent}            }}
+          {indent}        }}
+
+          {indent}        free(
+          {indent}            profilerReport
+          {indent}        );
+          {indent}    }}
+
+          {indent}    Profiler_reset(
+          {indent}        vm->profiler
+          {indent}    );
+          {indent}}}'''
+
+          s =
+              s[:if_pos] +
+              new_block +
+              s[brace_pos + 1:]
+
+          #
+          # Ensure stdio declarations exist.
+          #
+
+          if (
+              "#include <stdio.h>"
+              not in s
+          ):
+
+              include_pos =
+                  s.find(
+                      "#include"
+                  )
+
+              if include_pos >= 0:
+
+                  line_end =
+                      s.find(
+                          "\n",
+                          include_pos
+                      )
+
+                  s =
+                      s[:line_end + 1] +
+                      "#include <stdio.h>\n" +
+                      s[line_end + 1:]
+
+          p.write_text(
+              s
+          )
+
+          check =
+              p.read_text()
+
+          required = [
+              "SuperRR-profile.txt",
+              "Profiler_createReport",
+              "Profiler_reset",
+              "fopen(",
+              "fprintf(",
+              "fclose(",
+          ]
+
+          for item in required:
+
+              if item not in check:
+
+                  raise SystemExit(
+                      "ERROR: missing after patch: "
+                      + item
+                  )
+
+          print("")
+          print(
+              "======================================"
+          )
+          print(
+              "PROFILER FILE OUTPUT FIXED"
+          )
+          print(
+              "SuperRR-profile.txt enabled"
+          )
+          print(
+              "======================================"
+          )
           PY
 
       # ==========================================================
@@ -2463,10 +3044,20 @@ jobs:
           python3 <<'PY'
           from pathlib import Path
 
-          p = Path("src/math_compat.h")
+          p = Path(
+              "src/math_compat.h"
+          )
+
+          if not p.exists():
+              raise SystemExit(
+                  "ERROR: math_compat.h missing"
+              )
+
           s = p.read_text()
 
-          marker = '#include "real_type.h"'
+          marker = (
+              '#include "real_type.h"'
+          )
 
           patch = '''#include "real_type.h"
 
@@ -2492,13 +3083,17 @@ jobs:
               1
           )
 
-          p.write_text(s)
+          p.write_text(
+              s
+          )
 
-          print("iOS math fixed.")
+          print(
+              "iOS math fixed."
+          )
           PY
 
       # ==========================================================
-      # AUTOMATIC GAME INSTALLER
+      # GAME INSTALLER
       # ==========================================================
 
       - name: Add automatic game installer
@@ -2525,7 +3120,8 @@ jobs:
               @autoreleasepool {
 
                   NSFileManager *fm =
-                      [NSFileManager defaultManager];
+                      [NSFileManager
+                          defaultManager];
 
                   NSArray *roots =
                       bsGamesRootsToScan();
@@ -2533,41 +3129,56 @@ jobs:
                   if ([roots count] > 0) {
 
                       NSString *root =
-                          [roots objectAtIndex:0];
+                          [roots
+                              objectAtIndex:
+                                  0];
 
                       NSString *gamesDir =
-                          [root stringByAppendingPathComponent:
-                              @"games"];
+                          [root
+                              stringByAppendingPathComponent:
+                                  @"games"];
 
                       NSString *gameDest =
-                          [gamesDir stringByAppendingPathComponent:
-                              @"Super R-R"];
+                          [gamesDir
+                              stringByAppendingPathComponent:
+                                  @"Super R-R"];
 
                       NSString *dataDest =
-                          [gameDest stringByAppendingPathComponent:
-                              @"data.win"];
+                          [gameDest
+                              stringByAppendingPathComponent:
+                                  @"data.win"];
 
                       if (![fm
-                          fileExistsAtPath:dataDest]) {
+                          fileExistsAtPath:
+                              dataDest]) {
 
                           NSString *source =
-                              [[[NSBundle mainBundle]
+                              [[[NSBundle
+                                  mainBundle]
                                   resourcePath]
                                   stringByAppendingPathComponent:
                                       @"BundledGame"];
 
                           [fm
-                              createDirectoryAtPath:gamesDir
-                              withIntermediateDirectories:YES
-                              attributes:nil
-                              error:nil];
+                              createDirectoryAtPath:
+                                  gamesDir
+                              withIntermediateDirectories:
+                                  YES
+                              attributes:
+                                  nil
+                              error:
+                                  nil];
 
-                          NSError *copyError = nil;
+                          NSError *copyError =
+                              nil;
 
                           if (![fm
-                              copyItemAtPath:source
-                              toPath:gameDest
-                              error:&copyError]) {
+                              copyItemAtPath:
+                                  source
+                              toPath:
+                                  gameDest
+                              error:
+                                  &copyError]) {
 
                               NSLog(
                                   @"Super R-R copy failed: %@",
@@ -2600,13 +3211,17 @@ jobs:
               1
           )
 
-          p.write_text(s)
+          p.write_text(
+              s
+          )
 
-          print("Game installer complete.")
+          print(
+              "Game installer complete."
+          )
           PY
 
       # ==========================================================
-      # VERIFY SOURCE
+      # VERIFY
       # ==========================================================
 
       - name: Verify FPS diagnostic patches
@@ -2618,7 +3233,9 @@ jobs:
           LOOP="$GITHUB_WORKSPACE/Butterscotch/src/loop.c"
 
           echo
-          echo "===== PATCH CHECK ====="
+          echo "======================================"
+          echo "FPS DIAGNOSTIC PATCH CHECK"
+          echo "======================================"
 
           grep -n \
             'return BS_RENDERER_MODERN_GL' \
@@ -2663,7 +3280,9 @@ jobs:
             "$MAIN"
 
           echo
-          echo "ALL DIAGNOSTIC PATCHES FOUND"
+          echo "======================================"
+          echo "ALL PATCHES FOUND"
+          echo "======================================"
 
       # ==========================================================
       # CLEAN
@@ -2678,13 +3297,9 @@ jobs:
 
       # ==========================================================
       # BUILD
-      #
-      # IMPORTANT:
-      # DO NOT DISABLE VM_GML_PROFILER HERE.
-      # It is compiled in, but OFF at runtime until switch enabled.
       # ==========================================================
 
-      - name: Build Super Redux-Redux FPS Diagnosis v9
+      - name: Build Super Redux-Redux FPS Diagnosis v9 FIXED
         shell: bash
         run: |
           set +e
@@ -2692,16 +3307,20 @@ jobs:
           cd "$GITHUB_WORKSPACE/Butterscotch"
 
           HASH="$(
-            git rev-parse --short HEAD
+            git rev-parse \
+              --short HEAD
           )"
 
           DATE="$(
-            git show -s --format=%cs HEAD
+            git show \
+              -s \
+              --format=%cs \
+              HEAD
           )"
 
           echo
           echo "======================================"
-          echo "SUPER R-R FPS DIAGNOSIS v9"
+          echo "SUPER R-R FPS DIAGNOSIS v9 FIXED"
           echo "======================================"
           echo
           echo "Modern GL FORCED"
@@ -2726,7 +3345,9 @@ jobs:
             DISABLE_VM_TRACING=1 \
             BUTTERSCOTCH_COMMIT_HASH="$HASH" \
             BUTTERSCOTCH_COMMIT_DATE="$DATE" \
-            2>&1 | tee "$GITHUB_WORKSPACE/v9-build.log"
+            2>&1 \
+            | tee \
+              "$GITHUB_WORKSPACE/v9-fixed-build.log"
 
           STATUS=${PIPESTATUS[0]}
 
@@ -2737,10 +3358,13 @@ jobs:
             echo "REAL BUILD ERRORS"
             echo "======================================"
 
-            grep -n -E \
+            grep \
+              -n \
+              -E \
               "error:|fatal error:|ERROR:" \
-              "$GITHUB_WORKSPACE/v9-build.log" \
-              | tail -200 \
+              "$GITHUB_WORKSPACE/v9-fixed-build.log" \
+              | tail \
+                  -200 \
               || true
 
             echo "======================================"
@@ -2772,43 +3396,58 @@ jobs:
           test -f "$IPA"
           test -f "$BIN"
 
+          echo
           echo "Binary:"
+
           file "$BIN"
 
           echo
           echo "Architecture:"
-          lipo -info "$BIN" || true
+
+          lipo \
+            -info \
+            "$BIN" \
+            || true
 
           echo
           echo "IPA:"
-          ls -lh "$IPA"
+
+          ls \
+            -lh \
+            "$IPA"
 
           echo
           echo "Bundled data.win:"
 
-          unzip -l "$IPA" \
-            | grep -i \
-              "BundledGame/data.win"
+          unzip \
+            -l \
+            "$IPA" \
+            | grep \
+                -i \
+                "BundledGame/data.win"
 
       # ==========================================================
       # OUTPUT
       # ==========================================================
 
-      - name: Prepare Super RR v9
+      - name: Prepare Super RR v9 FIXED
         shell: bash
         run: |
           set -e
 
-          mkdir -p "$GITHUB_WORKSPACE/output"
+          mkdir -p \
+            "$GITHUB_WORKSPACE/output"
 
           cp \
             "$GITHUB_WORKSPACE/Butterscotch/build/butterscotch.ipa" \
-            "$GITHUB_WORKSPACE/output/Super-Redux-Redux-iOS-v9-FPS-Diagnosis.ipa"
+            "$GITHUB_WORKSPACE/output/Super-Redux-Redux-iOS-v9-FPS-Diagnosis-FIXED.ipa"
 
-          cat > "$GITHUB_WORKSPACE/output/README.txt" <<'EOF'
+          cat > \
+            "$GITHUB_WORKSPACE/output/README.txt" \
+            <<'EOF'
           SUPER REDUX-REDUX iOS
-          FPS DIAGNOSIS v9
-          ==================
+          FPS DIAGNOSIS v9 FIXED
+          ======================
 
           NORMAL PLAY
 
@@ -2827,10 +3466,10 @@ jobs:
           ARM64
           O3
           Thin LTO
-          72% internal framebuffer
+          72% framebuffer
           high resolution OFF
-          VM performance patch attempted
-          GL performance patch attempted
+          VM optimization attempted
+          GL optimization attempted
 
 
           IF FPS IS STILL BAD
@@ -2849,59 +3488,64 @@ jobs:
           Then play around 20-30 seconds
           on a level with enemies.
 
-          Reports are written to:
+          Look for:
 
-          Documents
-            saves
-              Super R-R
-                SuperRR-profile.txt
+          SuperRR-profile.txt
 
+          in the app Documents / save folder.
 
-          SEND SuperRR-profile.txt
-          TO CHATGPT.
-
-          It contains the top GML scripts
-          sorted by execution time.
+          Send that file to ChatGPT.
 
 
           CONTROLS
 
-          LEFT STICK = movement
+          LEFT STICK
+          movement
 
-          RIGHT LOOK = look / aim
+          RIGHT LOOK
+          look / aim
 
-          A = shoot / punch / Enter
+          A
+          shoot / punch / Enter
 
-          X = pickup / throw
+          X
+          pickup / throw
 
-          C = interaction
+          C
+          interaction
 
-          R = restart
+          R
+          restart
 
-          LOOK = Shift
+          LOOK
+          Shift
 
-          LOCK = middle mouse
+          LOCK
+          middle mouse
 
-          II = Pause
+          II
+          pause
 
-          FPS = real frame counter
+          FPS
+          real FPS counter
 
 
-          IPA is unsigned/ad-hoc.
+          IPA unsigned/ad-hoc.
           EOF
 
-          ls -lh "$GITHUB_WORKSPACE/output"
+          ls -lh \
+            "$GITHUB_WORKSPACE/output"
 
       # ==========================================================
       # UPLOAD
       # ==========================================================
 
-      - name: Upload Super RR v9
+      - name: Upload Super RR v9 FIXED
         uses: actions/upload-artifact@v4
         with:
-          name: super-redux-redux-ios-v9-FPS-Diagnosis
+          name: super-redux-redux-ios-v9-FPS-Diagnosis-FIXED
           path: |
-            output/Super-Redux-Redux-iOS-v9-FPS-Diagnosis.ipa
+            output/Super-Redux-Redux-iOS-v9-FPS-Diagnosis-FIXED.ipa
             output/README.txt
           if-no-files-found: error
           retention-days: 7
@@ -2914,13 +3558,13 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: super-rr-v9-failed
+          name: super-rr-v9-fixed-failed
           path: |
             Butterscotch/src/ios/main.c
             Butterscotch/src/vm_builtins.c
             Butterscotch/src/loop.c
             Butterscotch/src/math_compat.h
             Butterscotch/compat/config.mk
-            v9-build.log
+            v9-fixed-build.log
           if-no-files-found: ignore
           retention-days: 7
