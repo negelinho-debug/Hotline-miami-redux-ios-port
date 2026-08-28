@@ -1,4 +1,4 @@
-name: Super Redux-Redux iOS FPS Diagnosis v9 FIXED
+name: Super Redux-Redux iOS FPS Diagnosis v9 FIXED 2
 
 on:
   workflow_dispatch:
@@ -75,7 +75,7 @@ jobs:
           du -sh "$GAME_DIR"
 
       # ==========================================================
-      # BUTTERSCOTCH IOS
+      # BUTTERSCOTCH
       # ==========================================================
 
       - name: Download Butterscotch iOS
@@ -95,7 +95,7 @@ jobs:
           git rev-parse HEAD
 
       # ==========================================================
-      # PERFORMANCE PATCHES
+      # GL + VM PERFORMANCE
       # ==========================================================
 
       - name: Apply GL and VM performance patches
@@ -111,7 +111,9 @@ jobs:
             https://github.com/ButterscotchRunner/Butterscotch.git
 
           echo
-          echo "===== GL PERFORMANCE ====="
+          echo "======================================"
+          echo "GL PERFORMANCE"
+          echo "======================================"
 
           GL_BEFORE="$(git rev-parse HEAD)"
 
@@ -137,6 +139,8 @@ jobs:
                 continue
               fi
 
+              echo "Applying $C"
+
               if ! git cherry-pick "$C"; then
 
                 git cherry-pick --abort || true
@@ -145,12 +149,13 @@ jobs:
                 GL_OK=0
                 break
               fi
+
             done
 
             if [ "$GL_OK" = "1" ]; then
               echo "GL optimization enabled."
             else
-              echo "GL optimization skipped safely."
+              echo "GL optimization skipped."
             fi
 
           else
@@ -160,7 +165,9 @@ jobs:
           fi
 
           echo
-          echo "===== VM PERFORMANCE ====="
+          echo "======================================"
+          echo "VM PERFORMANCE"
+          echo "======================================"
 
           VM_BEFORE="$(git rev-parse HEAD)"
 
@@ -185,6 +192,8 @@ jobs:
                 continue
               fi
 
+              echo "Applying $C"
+
               if ! git cherry-pick "$C"; then
 
                 git cherry-pick --abort || true
@@ -193,12 +202,13 @@ jobs:
                 VM_OK=0
                 break
               fi
+
             done
 
             if [ "$VM_OK" = "1" ]; then
               echo "VM optimization enabled."
             else
-              echo "VM optimization skipped safely."
+              echo "VM optimization skipped."
             fi
 
           else
@@ -284,7 +294,7 @@ jobs:
             "$PLIST"
 
       # ==========================================================
-      # BUNDLE GAME
+      # GAME DATA
       # ==========================================================
 
       - name: Bundle complete Super Redux-Redux
@@ -342,7 +352,8 @@ jobs:
               if (argCount < 5)
                   return RValue_makeUndefined();
 
-              Runner* runner = ctx->runner;
+              Runner* runner =
+                  ctx->runner;
 
               if (runner == nullptr ||
                   runner->renderer == nullptr)
@@ -370,7 +381,9 @@ jobs:
               Matrix4f view;
               Matrix4f projection;
 
-              Matrix4f_identity(&view);
+              Matrix4f_identity(
+                  &view
+              );
 
               Matrix4f_viewProjection(
                   &projection,
@@ -381,11 +394,14 @@ jobs:
                   angle
               );
 
-              runner->renderer->vtable->applyProjection(
-                  runner->renderer,
-                  &view,
-                  &projection
-              );
+              runner
+                  ->renderer
+                  ->vtable
+                  ->applyProjection(
+                      runner->renderer,
+                      &view,
+                      &projection
+                  );
 
               return RValue_makeUndefined();
           }
@@ -399,17 +415,25 @@ jobs:
               if (argCount < 16)
                   return RValue_makeUndefined();
 
-              Runner* runner = ctx->runner;
-              DataWin* dw = ctx->dataWin;
+              Runner* runner =
+                  ctx->runner;
+
+              DataWin* dw =
+                  ctx->dataWin;
 
               int32_t roomId =
-                  RValue_toInt32(args[0]);
+                  RValue_toInt32(
+                      args[0]
+                  );
 
               int32_t viewId =
-                  RValue_toInt32(args[1]);
+                  RValue_toInt32(
+                      args[1]
+                  );
 
               if (roomId < 0 ||
-                  (uint32_t)roomId >= dw->room.count ||
+                  (uint32_t)roomId >=
+                      dw->room.count ||
                   viewId < 0 ||
                   viewId >= MAX_VIEWS)
                   return RValue_makeUndefined();
@@ -420,57 +444,89 @@ jobs:
               );
 
               Room* room =
-                  &dw->room.rooms[roomId];
+                  &dw->room.rooms[
+                      roomId
+                  ];
 
               if (room->views == nullptr)
                   return RValue_makeUndefined();
 
               RoomView* v =
-                  &room->views[viewId];
+                  &room->views[
+                      viewId
+                  ];
 
               v->enabled =
-                  RValue_toBool(args[2]);
+                  RValue_toBool(
+                      args[2]
+                  );
 
               v->viewX =
-                  RValue_toInt32(args[3]);
+                  RValue_toInt32(
+                      args[3]
+                  );
 
               v->viewY =
-                  RValue_toInt32(args[4]);
+                  RValue_toInt32(
+                      args[4]
+                  );
 
               v->viewWidth =
-                  RValue_toInt32(args[5]);
+                  RValue_toInt32(
+                      args[5]
+                  );
 
               v->viewHeight =
-                  RValue_toInt32(args[6]);
+                  RValue_toInt32(
+                      args[6]
+                  );
 
               v->portX =
-                  RValue_toInt32(args[7]);
+                  RValue_toInt32(
+                      args[7]
+                  );
 
               v->portY =
-                  RValue_toInt32(args[8]);
+                  RValue_toInt32(
+                      args[8]
+                  );
 
               v->portWidth =
-                  RValue_toInt32(args[9]);
+                  RValue_toInt32(
+                      args[9]
+                  );
 
               v->portHeight =
-                  RValue_toInt32(args[10]);
+                  RValue_toInt32(
+                      args[10]
+                  );
 
               v->borderX =
                   (uint32_t)
-                  RValue_toInt32(args[11]);
+                  RValue_toInt32(
+                      args[11]
+                  );
 
               v->borderY =
                   (uint32_t)
-                  RValue_toInt32(args[12]);
+                  RValue_toInt32(
+                      args[12]
+                  );
 
               v->speedX =
-                  RValue_toInt32(args[13]);
+                  RValue_toInt32(
+                      args[13]
+                  );
 
               v->speedY =
-                  RValue_toInt32(args[14]);
+                  RValue_toInt32(
+                      args[14]
+                  );
 
               v->objectId =
-                  RValue_toInt32(args[15]);
+                  RValue_toInt32(
+                      args[15]
+                  );
 
               if (v->enabled)
                   room->flags |= 1;
@@ -483,7 +539,9 @@ jobs:
                       (room->flags & 1) != 0;
 
                   RuntimeView* rv =
-                      &runner->views[viewId];
+                      &runner->views[
+                          viewId
+                      ];
 
                   rv->enabled =
                       v->enabled;
@@ -691,7 +749,8 @@ jobs:
 
           s = s.replace(
               reg,
-              reg + '\n'
+              reg +
+              '\n'
               '    VM_registerBuiltin(ctx, '
               '"d3d_set_projection_ortho", '
               'builtin_d3d_set_projection_ortho);',
@@ -711,7 +770,8 @@ jobs:
 
           s = s.replace(
               reg,
-              reg + '\n'
+              reg +
+              '\n'
               '    VM_registerBuiltin(ctx, '
               '"room_set_view", '
               'builtin_room_set_view);',
@@ -731,7 +791,8 @@ jobs:
 
           s = s.replace(
               reg,
-              reg + '\n'
+              reg +
+              '\n'
               '    VM_registerBuiltin(ctx, '
               '"display_mouse_get_x", '
               'builtin_display_mouse_get_x);\n'
@@ -758,7 +819,7 @@ jobs:
           PY
 
       # ==========================================================
-      # GAMEPLAY CONTROLS
+      # TOUCH CONTROLS
       # ==========================================================
 
       - name: Patch Redux gameplay controls
@@ -878,11 +939,14 @@ jobs:
                       g_runner->mouse) {
 
                       if (ev.isDown) {
+
                           RunnerMouse_onButtonDown(
                               g_runner->mouse,
                               ev.button
                           );
+
                       } else {
+
                           RunnerMouse_onButtonUp(
                               g_runner->mouse,
                               ev.button
@@ -1043,13 +1107,17 @@ jobs:
               1
           )
 
-          if 'BSKeyButton      *_actionButtons[3];' not in s:
+          action_decl = (
+              'BSKeyButton      *_actionButtons[3];'
+          )
+
+          if action_decl not in s:
               raise SystemExit(
                   "ERROR: action declaration missing"
               )
 
           s = s.replace(
-              'BSKeyButton      *_actionButtons[3];',
+              action_decl,
               'BSActionButton   *_actionButtons[3];',
               1
           )
@@ -1118,9 +1186,13 @@ jobs:
               '{ VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT };'
           )
 
-          if s.count(old_dpad) < 2:
+          count = s.count(
+              old_dpad
+          )
+
+          if count < 2:
               raise SystemExit(
-                  "ERROR: dpad maps missing"
+                  f"ERROR: dpad maps missing: {count}"
               )
 
           s = s.replace(
@@ -1133,15 +1205,22 @@ jobs:
                       if ([_actionButtons[i] handleTouchBegan:touch point:p]) break;
                   }'''
 
-          new = '''        BOOL actionHandled = NO;
+          new = '''        BOOL actionHandled =
+                      NO;
 
-                  for (int i = 0; i < 3; i++) {
+                  for (int i = 0;
+                       i < 3;
+                       i++) {
 
                       if ([_actionButtons[i]
-                              handleTouchBegan:touch
-                              point:p]) {
+                              handleTouchBegan:
+                                  touch
+                              point:
+                                  p]) {
 
-                          actionHandled = YES;
+                          actionHandled =
+                              YES;
+
                           break;
                       }
                   }
@@ -1191,17 +1270,24 @@ jobs:
           new = '''    for (UITouch *touch in touches) {
 
                   CGPoint p =
-                      [touch locationInView:self];
+                      [touch
+                          locationInView:
+                              self];
 
                   if ([_dpad
-                          handleTouchMoved:touch
-                          point:p]) {
+                          handleTouchMoved:
+                              touch
+                          point:
+                              p]) {
 
-                      [self setNeedsDisplay];
+                      [self
+                          setNeedsDisplay];
+
                       continue;
                   }
 
-                  if (touch == _aimTouch) {
+                  if (touch ==
+                      _aimTouch) {
 
                       BSLayout layout =
                           computeLayout(
@@ -1230,14 +1316,20 @@ jobs:
                       if ([_actionButtons[i] handleTouchEnded:touch]) break;
                   }'''
 
-          new = '''        BOOL actionEnded = NO;
+          new = '''        BOOL actionEnded =
+                      NO;
 
-                  for (int i = 0; i < 3; i++) {
+                  for (int i = 0;
+                       i < 3;
+                       i++) {
 
                       if ([_actionButtons[i]
-                              handleTouchEnded:touch]) {
+                              handleTouchEnded:
+                                  touch]) {
 
-                          actionEnded = YES;
+                          actionEnded =
+                              YES;
+
                           break;
                       }
                   }
@@ -1245,10 +1337,14 @@ jobs:
                   if (actionEnded)
                       continue;
 
-                  if (touch == _aimTouch) {
+                  if (touch ==
+                      _aimTouch) {
 
-                      [_aimTouch release];
-                      _aimTouch = nil;
+                      [_aimTouch
+                          release];
+
+                      _aimTouch =
+                          nil;
                   }'''
 
           if old not in s:
@@ -1265,17 +1361,21 @@ jobs:
           old = '''    for (int i = 0; i < 3; i++) [_actionButtons[i] release];
               [super dealloc];'''
 
-          new = '''    for (int i = 0; i < 3; i++)
-                  [_actionButtons[i] release];
+          new = '''    for (int i = 0;
+                   i < 3;
+                   i++)
+                  [_actionButtons[i]
+                      release];
 
               if (_aimTouch)
-                  [_aimTouch release];
+                  [_aimTouch
+                      release];
 
               [super dealloc];'''
 
           if old not in s:
               raise SystemExit(
-                  "ERROR: dealloc missing"
+                  "ERROR: action dealloc missing"
               )
 
           s = s.replace(
@@ -1299,10 +1399,15 @@ jobs:
                  hitExpansion:(CGFloat)expansion {
 
               if ((self =
-                  [super initWithFrame:frame
-                                label:label
-                                 font:fontSize
-                         hitExpansion:expansion])) {
+                  [super
+                      initWithFrame:
+                          frame
+                      label:
+                          label
+                      font:
+                          fontSize
+                      hitExpansion:
+                          expansion])) {
 
                   _mouseButton =
                       mouseButton;
@@ -1358,7 +1463,7 @@ jobs:
 
           if marker2 not in s:
               raise SystemExit(
-                  "ERROR: implementation marker missing"
+                  "ERROR: action implementation marker missing"
               )
 
           s = s.replace(
@@ -1410,25 +1515,35 @@ jobs:
                   1
               )
 
-          if 'BSToggleKeyButton *_ffButton;' not in s:
+          old = (
+              'BSToggleKeyButton *_ffButton;'
+          )
+
+          if old not in s:
               raise SystemExit(
                   "ERROR: ff declaration missing"
               )
 
           s = s.replace(
-              'BSToggleKeyButton *_ffButton;',
+              old,
               'BSKeyButton       *_ffButton;',
               1
           )
 
           old = '''        _ffButton = [[BSToggleKeyButton alloc] initWithFrame:CGRectZero key:VK_TAB label:@">>" font:16.0f hitExpansion:6.0f];'''
 
-          new = '''        _ffButton = [[BSKeyButton alloc]
-                      initWithFrame:CGRectZero
-                      key:VK_SHIFT
-                      label:@"LOOK"
-                      font:9.0f
-                      hitExpansion:10.0f];'''
+          new = '''        _ffButton =
+                      [[BSKeyButton alloc]
+                          initWithFrame:
+                              CGRectZero
+                          key:
+                              VK_SHIFT
+                          label:
+                              @"LOOK"
+                          font:
+                              9.0f
+                          hitExpansion:
+                              10.0f];'''
 
           if old not in s:
               raise SystemExit(
@@ -1460,20 +1575,33 @@ jobs:
 
           old = '''        _aimTouch = nil;'''
 
-          new = '''        _restartButton = [[BSKeyButton alloc]
-                      initWithFrame:CGRectZero
-                      key:'R'
-                      label:@"R"
-                      font:14.0f
-                      hitExpansion:10.0f];
+          new = '''        _restartButton =
+                      [[BSKeyButton alloc]
+                          initWithFrame:
+                              CGRectZero
+                          key:
+                              'R'
+                          label:
+                              @"R"
+                          font:
+                              14.0f
+                          hitExpansion:
+                              10.0f];
 
-                  _lockButton = [[BSActionButton alloc]
-                      initWithFrame:CGRectZero
-                      mouseButton:GML_MB_MIDDLE
-                      key:-1
-                      label:@"LOCK"
-                      font:8.0f
-                      hitExpansion:10.0f];
+                  _lockButton =
+                      [[BSActionButton alloc]
+                          initWithFrame:
+                              CGRectZero
+                          mouseButton:
+                              GML_MB_MIDDLE
+                          key:
+                              -1
+                          label:
+                              @"LOCK"
+                          font:
+                              8.0f
+                          hitExpansion:
+                              10.0f];
 
                   _aimTouch = nil;'''
 
@@ -1490,7 +1618,8 @@ jobs:
 
           old = '''    _ffButton.frame = layout.ffFrame;'''
 
-          new = '''    _ffButton.frame = layout.ffFrame;
+          new = '''    _ffButton.frame =
+                  layout.ffFrame;
 
               CGFloat rightEdge =
                   self.bounds.size.width -
@@ -1499,7 +1628,8 @@ jobs:
 
               _restartButton.frame =
                   CGRectMake(
-                      rightEdge - 42.0f,
+                      rightEdge -
+                          42.0f,
                       BS_QUIT_BUTTON_MARGIN,
                       34.0f,
                       34.0f
@@ -1507,7 +1637,8 @@ jobs:
 
               _lockButton.frame =
                   CGRectMake(
-                      rightEdge - 94.0f,
+                      rightEdge -
+                          94.0f,
                       BS_QUIT_BUTTON_MARGIN,
                       46.0f,
                       34.0f
@@ -1515,7 +1646,7 @@ jobs:
 
           if old not in s:
               raise SystemExit(
-                  "ERROR: layout missing"
+                  "ERROR: control layout missing"
               )
 
           s = s.replace(
@@ -1532,7 +1663,7 @@ jobs:
 
           if old not in s:
               raise SystemExit(
-                  "ERROR: draw missing"
+                  "ERROR: control draw missing"
               )
 
           s = s.replace(
@@ -1551,7 +1682,7 @@ jobs:
 
           if old not in s:
               raise SystemExit(
-                  "ERROR: begin missing"
+                  "ERROR: R/LOCK begin missing"
               )
 
           s = s.replace(
@@ -1568,7 +1699,7 @@ jobs:
 
           if old not in s:
               raise SystemExit(
-                  "ERROR: end missing"
+                  "ERROR: R/LOCK end missing"
               )
 
           s = s.replace(
@@ -1585,7 +1716,7 @@ jobs:
 
           if old not in s:
               raise SystemExit(
-                  "ERROR: ff dealloc missing"
+                  "ERROR: control dealloc missing"
               )
 
           s = s.replace(
@@ -1602,7 +1733,7 @@ jobs:
           PY
 
       # ==========================================================
-      # PAUSE FPS RIGHT LOOK
+      # PAUSE + FPS + RIGHT LOOK
       # ==========================================================
 
       - name: Add PAUSE FPS and right LOOK
@@ -1849,7 +1980,8 @@ jobs:
 
           old = '''    _lockButton.frame =
                   CGRectMake(
-                      rightEdge - 94.0f,
+                      rightEdge -
+                          94.0f,
                       BS_QUIT_BUTTON_MARGIN,
                       46.0f,
                       34.0f
@@ -1857,7 +1989,8 @@ jobs:
 
           new = '''    _lockButton.frame =
                   CGRectMake(
-                      rightEdge - 94.0f,
+                      rightEdge -
+                          94.0f,
                       BS_QUIT_BUTTON_MARGIN,
                       46.0f,
                       34.0f
@@ -1866,7 +1999,8 @@ jobs:
               _pauseButton.frame =
                   CGRectMake(
                       (self.bounds.size.width -
-                       38.0f) * 0.5f,
+                       38.0f) *
+                          0.5f,
                       BS_QUIT_BUTTON_MARGIN,
                       38.0f,
                       34.0f
@@ -2041,8 +2175,10 @@ jobs:
                   if ([_pauseButton handleTouchBegan:touch point:p]) continue;
 
                   if ([_lookPad
-                          handleTouchBegan:touch
-                          point:p]) {
+                          handleTouchBegan:
+                              touch
+                          point:
+                              p]) {
 
                       [self
                           setNeedsDisplay];
@@ -2064,32 +2200,46 @@ jobs:
           )
 
           old = '''        if ([_dpad
-                          handleTouchMoved:touch
-                          point:p]) {
+                          handleTouchMoved:
+                              touch
+                          point:
+                              p]) {
 
-                      [self setNeedsDisplay];
+                      [self
+                          setNeedsDisplay];
+
                       continue;
                   }
 
-                  if (touch == _aimTouch) {'''
+                  if (touch ==
+                      _aimTouch) {'''
 
           new = '''        if ([_dpad
-                          handleTouchMoved:touch
-                          point:p]) {
+                          handleTouchMoved:
+                              touch
+                          point:
+                              p]) {
 
-                      [self setNeedsDisplay];
+                      [self
+                          setNeedsDisplay];
+
                       continue;
                   }
 
                   if ([_lookPad
-                          handleTouchMoved:touch
-                          point:p]) {
+                          handleTouchMoved:
+                              touch
+                          point:
+                              p]) {
 
-                      [self setNeedsDisplay];
+                      [self
+                          setNeedsDisplay];
+
                       continue;
                   }
 
-                  if (touch == _aimTouch) {'''
+                  if (touch ==
+                      _aimTouch) {'''
 
           if old not in s:
               raise SystemExit(
@@ -2108,7 +2258,8 @@ jobs:
                   if ([_pauseButton handleTouchEnded:touch]) continue;
 
                   if ([_lookPad
-                          handleTouchEnded:touch]) {
+                          handleTouchEnded:
+                              touch]) {
 
                       [self
                           setNeedsDisplay];
@@ -2214,7 +2365,8 @@ jobs:
                       _frame
                   );
 
-              if (maxR <= 1.0f)
+              if (maxR <=
+                  1.0f)
                   return;
 
               CGFloat nx =
@@ -2350,7 +2502,9 @@ jobs:
               _thumbOffset =
                   CGPointZero;
 
-              [_touch release];
+              [_touch
+                  release];
+
               _touch =
                   nil;
 
@@ -2417,10 +2571,8 @@ jobs:
                           thumbR,
                       thumbY -
                           thumbR,
-                      thumbR *
-                          2.0f,
-                      thumbR *
-                          2.0f
+                      thumbR * 2.0f,
+                      thumbR * 2.0f
                   );
 
               CGContextSetRGBFillColor(
@@ -2467,7 +2619,7 @@ jobs:
           p.write_text(s)
 
           print(
-              "Pause FPS right LOOK complete."
+              "PAUSE FPS RIGHT LOOK complete."
           )
           PY
 
@@ -2544,7 +2696,9 @@ jobs:
 
               if ([[NSThread currentThread]
                       respondsToSelector:
-                          @selector(setQualityOfService:)]) {
+                          @selector(
+                              setQualityOfService:
+                          )]) {
 
                   [[NSThread currentThread]
                       setQualityOfService:
@@ -2552,6 +2706,7 @@ jobs:
               }'''
 
           if old_thread in s:
+
               s = s.replace(
                   old_thread,
                   new_thread,
@@ -2560,12 +2715,18 @@ jobs:
 
           p.write_text(s)
 
+          print("")
           print(
-              "Modern GL forced."
+              "======================================"
           )
-
           print(
-              "Framebuffer scale 72%."
+              "MODERN GL FORCED"
+          )
+          print(
+              "FRAMEBUFFER 72%"
+          )
+          print(
+              "======================================"
           )
           PY
 
@@ -2629,11 +2790,13 @@ jobs:
           replacement = '''    debugSwitch.on = bsLoadDebugEnabled();
               [root addSubview:debugSwitch];
 
-              y += debugSwFrame.size.height + gap * 2;
+              y += debugSwFrame.size.height +
+                  gap * 2;
 
               profileSwitch =
                   [[UISwitch alloc]
-                      initWithFrame:CGRectZero];
+                      initWithFrame:
+                          CGRectZero];
 
               [profileSwitch
                   sizeToFit];
@@ -2704,12 +2867,16 @@ jobs:
           marker = '''    [[NSUserDefaults standardUserDefaults] setBool:debugSwitch.isOn forKey:BS_DEBUG_DEFAULTS_KEY];'''
 
           replacement = '''    [[NSUserDefaults standardUserDefaults]
-                  setBool:debugSwitch.isOn
-                   forKey:BS_DEBUG_DEFAULTS_KEY];
+                  setBool:
+                      debugSwitch.isOn
+                   forKey:
+                      BS_DEBUG_DEFAULTS_KEY];
 
               [[NSUserDefaults standardUserDefaults]
-                  setBool:profileSwitch.isOn
-                   forKey:BS_PROFILE_DEFAULTS_KEY];'''
+                  setBool:
+                      profileSwitch.isOn
+                   forKey:
+                      BS_PROFILE_DEFAULTS_KEY];'''
 
           if marker not in s:
               raise SystemExit(
@@ -2727,7 +2894,9 @@ jobs:
 
           replacement = '''    [debugSwitch release];
               [profileSwitch release];
-              if (rendererControl) [rendererControl release];'''
+
+              if (rendererControl)
+                  [rendererControl release];'''
 
           if marker not in s:
               raise SystemExit(
@@ -2743,7 +2912,8 @@ jobs:
           marker = '''    args.profilerFramesBetween = 0;'''
 
           replacement = '''    BOOL bsProfileEnabled =
-                  [[NSUserDefaults standardUserDefaults]
+                  [[NSUserDefaults
+                      standardUserDefaults]
                       boolForKey:
                           BS_PROFILE_DEFAULTS_KEY];
 
@@ -2771,7 +2941,12 @@ jobs:
           PY
 
       # ==========================================================
-      # FIXED PROFILER FILE OUTPUT
+      # SAVE PROFILER TO FILE
+      #
+      # FIXED:
+      # no broken old_block = line
+      # no regex guessing
+      # exact current loop.c profiler block
       # ==========================================================
 
       - name: Save profiler results to Files app
@@ -2783,7 +2958,6 @@ jobs:
 
           python3 <<'PY'
           from pathlib import Path
-          import re
 
           p = Path(
               "Butterscotch/src/loop.c"
@@ -2796,206 +2970,136 @@ jobs:
 
           s = p.read_text()
 
-          #
-          # Find profiler block without depending on
-          # exact whitespace or line wrapping.
-          #
+          old_block = '''                if (args.profilerFramesBetween > 0 && runner->frameCount > 0 && runner->frameCount % args.profilerFramesBetween == 0) {
+                      char* profilerReport = Profiler_createReport(vm->profiler, 20, args.profilerFramesBetween);
+                      if (profilerReport != nullptr) {
+                          logInfo("%s\\n", profilerReport);
+                          free(profilerReport);
+                      }
+                      Profiler_reset(vm->profiler);
+                  }'''
 
-          start = s.find(
-              "args.profilerFramesBetween > 0"
-          )
+          new_block = '''                if (
+                      args.profilerFramesBetween > 0 &&
+                      runner->frameCount > 0 &&
+                      runner->frameCount %
+                          args.profilerFramesBetween == 0
+                  ) {
 
-          if start < 0:
-              start = s.find(
+                      char* profilerReport =
+                          Profiler_createReport(
+                              vm->profiler,
+                              30,
+                              args.profilerFramesBetween
+                          );
+
+                      if (profilerReport != nullptr) {
+
+                          logInfo(
+                              "%s\\n",
+                              profilerReport
+                          );
+
+                          if (
+                              args.saveFolder != nullptr
+                          ) {
+
+                              char profilePath[1024];
+
+                              snprintf(
+                                  profilePath,
+                                  sizeof(profilePath),
+                                  "%s/SuperRR-profile.txt",
+                                  args.saveFolder
+                              );
+
+                              FILE* profileFile =
+                                  fopen(
+                                      profilePath,
+                                      "ab"
+                                  );
+
+                              if (
+                                  profileFile != nullptr
+                              ) {
+
+                                  fprintf(
+                                      profileFile,
+                                      "\\n"
+                                      "========================================\\n"
+                                      "FRAME %d\\n"
+                                      "========================================\\n"
+                                      "%s\\n",
+                                      runner->frameCount,
+                                      profilerReport
+                                  );
+
+                                  fclose(
+                                      profileFile
+                                  );
+
+                              } else {
+
+                                  logWarn(
+                                      "Could not open SuperRR-profile.txt\\n"
+                                  );
+                              }
+                          }
+
+                          free(
+                              profilerReport
+                          );
+                      }
+
+                      Profiler_reset(
+                          vm->profiler
+                      );
+                  }'''
+
+          if old_block not in s:
+
+              print("")
+              print(
+                  "===== PROFILER SOURCE AREA ====="
+              )
+
+              pos = s.find(
                   "args.profilerFramesBetween"
               )
 
-          if start < 0:
-              raise SystemExit(
-                  "ERROR: profilerFramesBetween missing"
-              )
+              if pos >= 0:
 
-          if_pos = s.rfind(
-              "if",
-              max(
-                  0,
-                  start - 100
-              ),
-              start + 5
-          )
-
-          if if_pos < 0:
-              raise SystemExit(
-                  "ERROR: profiler if block start missing"
-              )
-
-          reset_pos = s.find(
-              "Profiler_reset",
-              start
-          )
-
-          if reset_pos < 0:
-              raise SystemExit(
-                  "ERROR: Profiler_reset missing"
-              )
-
-          semicolon_pos = s.find(
-              ";",
-              reset_pos
-          )
-
-          if semicolon_pos < 0:
-              raise SystemExit(
-                  "ERROR: profiler reset semicolon missing"
-              )
-
-          brace_pos = s.find(
-              "}",
-              semicolon_pos
-          )
-
-          if brace_pos < 0:
-              raise SystemExit(
-                  "ERROR: profiler block end missing"
-              )
-
-          old_block =
-              s[
-                  if_pos:
-                  brace_pos + 1
-              ]
-
-          print("")
-          print(
-              "===== ORIGINAL PROFILER BLOCK ====="
-          )
-          print(
-              old_block
-          )
-          print(
-              "==================================="
-          )
-
-          indent_match = re.match(
-              r'[ \t]*',
-              old_block
-          )
-
-          indent = (
-              indent_match.group(0)
-              if indent_match
-              else ""
-          )
-
-          new_block = f'''{indent}if (
-          {indent}    args.profilerFramesBetween > 0 &&
-          {indent}    runner->frameCount > 0 &&
-          {indent}    runner->frameCount %
-          {indent}        args.profilerFramesBetween == 0
-          {indent}) {{
-
-          {indent}    char* profilerReport =
-          {indent}        Profiler_createReport(
-          {indent}            vm->profiler,
-          {indent}            30,
-          {indent}            args.profilerFramesBetween
-          {indent}        );
-
-          {indent}    if (profilerReport != nullptr) {{
-
-          {indent}        logInfo(
-          {indent}            "%s\\\\n",
-          {indent}            profilerReport
-          {indent}        );
-
-          {indent}        if (
-          {indent}            args.saveFolder != nullptr
-          {indent}        ) {{
-
-          {indent}            char profilePath[1024];
-
-          {indent}            snprintf(
-          {indent}                profilePath,
-          {indent}                sizeof(profilePath),
-          {indent}                "%s/SuperRR-profile.txt",
-          {indent}                args.saveFolder
-          {indent}            );
-
-          {indent}            FILE* profileFile =
-          {indent}                fopen(
-          {indent}                    profilePath,
-          {indent}                    "ab"
-          {indent}                );
-
-          {indent}            if (
-          {indent}                profileFile != nullptr
-          {indent}            ) {{
-
-          {indent}                fprintf(
-          {indent}                    profileFile,
-          {indent}                    "\\\\n"
-          {indent}                    "========================================\\\\n"
-          {indent}                    "FRAME %d\\\\n"
-          {indent}                    "========================================\\\\n"
-          {indent}                    "%s\\\\n",
-          {indent}                    runner->frameCount,
-          {indent}                    profilerReport
-          {indent}                );
-
-          {indent}                fclose(
-          {indent}                    profileFile
-          {indent}                );
-          {indent}            }}
-          {indent}        }}
-
-          {indent}        free(
-          {indent}            profilerReport
-          {indent}        );
-          {indent}    }}
-
-          {indent}    Profiler_reset(
-          {indent}        vm->profiler
-          {indent}    );
-          {indent}}}'''
-
-          s =
-              s[:if_pos] +
-              new_block +
-              s[brace_pos + 1:]
-
-          #
-          # Ensure stdio declarations exist.
-          #
-
-          if (
-              "#include <stdio.h>"
-              not in s
-          ):
-
-              include_pos =
-                  s.find(
-                      "#include"
+                  start = max(
+                      0,
+                      pos - 300
                   )
 
-              if include_pos >= 0:
+                  end = min(
+                      len(s),
+                      pos + 1200
+                  )
 
-                  line_end =
-                      s.find(
-                          "\n",
-                          include_pos
-                      )
+                  print(
+                      s[start:end]
+                  )
 
-                  s =
-                      s[:line_end + 1] +
-                      "#include <stdio.h>\n" +
-                      s[line_end + 1:]
+              print(
+                  "================================"
+              )
 
-          p.write_text(
-              s
+              raise SystemExit(
+                  "ERROR: exact profiler block missing"
+              )
+
+          s = s.replace(
+              old_block,
+              new_block,
+              1
           )
 
-          check =
-              p.read_text()
+          p.write_text(s)
+
+          check = p.read_text()
 
           required = [
               "SuperRR-profile.txt",
@@ -3011,7 +3115,7 @@ jobs:
               if item not in check:
 
                   raise SystemExit(
-                      "ERROR: missing after patch: "
+                      "ERROR: profiler output patch missing: "
                       + item
                   )
 
@@ -3020,10 +3124,10 @@ jobs:
               "======================================"
           )
           print(
-              "PROFILER FILE OUTPUT FIXED"
+              "PROFILER OUTPUT READY"
           )
           print(
-              "SuperRR-profile.txt enabled"
+              "SuperRR-profile.txt"
           )
           print(
               "======================================"
@@ -3061,6 +3165,10 @@ jobs:
 
           patch = '''#include "real_type.h"
 
+          /*
+           * Apple/iOS already provides
+           * these C99 math functions.
+           */
           #if defined(__APPLE__)
           #undef NO_LROUND
           #undef NO_SQRTF
@@ -3083,17 +3191,15 @@ jobs:
               1
           )
 
-          p.write_text(
-              s
-          )
+          p.write_text(s)
 
           print(
-              "iOS math fixed."
+              "iOS math compatibility fixed."
           )
           PY
 
       # ==========================================================
-      # GAME INSTALLER
+      # AUTOMATIC GAME INSTALL
       # ==========================================================
 
       - name: Add automatic game installer
@@ -3211,9 +3317,7 @@ jobs:
               1
           )
 
-          p.write_text(
-              s
-          )
+          p.write_text(s)
 
           print(
               "Game installer complete."
@@ -3221,7 +3325,7 @@ jobs:
           PY
 
       # ==========================================================
-      # VERIFY
+      # VERIFY EVERYTHING
       # ==========================================================
 
       - name: Verify FPS diagnostic patches
@@ -3234,47 +3338,74 @@ jobs:
 
           echo
           echo "======================================"
-          echo "FPS DIAGNOSTIC PATCH CHECK"
+          echo "SUPER R-R v9 FIXED 2 PATCH CHECK"
           echo "======================================"
 
+          echo
+          echo "Modern GL:"
           grep -n \
             'return BS_RENDERER_MODERN_GL' \
             "$MAIN"
 
+          echo
+          echo "Render scale:"
           grep -n \
             'targetScale \*= 0.72f' \
             "$MAIN"
 
+          echo
+          echo "Profiler switch:"
           grep -n \
             'BS_PROFILE_DEFAULTS_KEY' \
             "$MAIN"
 
+          echo
+          echo "Profiler interval:"
           grep -n \
             'profilerFramesBetween' \
             "$MAIN" \
             | tail
 
+          echo
+          echo "Profiler file:"
           grep -n \
             'SuperRR-profile.txt' \
             "$LOOP"
 
+          echo
+          echo "FPS counter:"
           grep -n \
             'bsDisplayedFPS' \
             "$MAIN" \
             | head
 
+          echo
+          echo "Right look:"
+          grep -n \
+            'BSLookPad' \
+            "$MAIN" \
+            | head
+
+          echo
+          echo "LOOK:"
           grep -n \
             'label:@"LOOK"' \
             "$MAIN"
 
+          echo
+          echo "LOCK:"
           grep -n \
             'label:@"LOCK"' \
             "$MAIN"
 
+          echo
+          echo "R:"
           grep -n \
             "key:'R'" \
             "$MAIN"
 
+          echo
+          echo "Pause:"
           grep -n \
             'label:@"II"' \
             "$MAIN"
@@ -3297,9 +3428,12 @@ jobs:
 
       # ==========================================================
       # BUILD
+      #
+      # GML profiler remains compiled.
+      # It is OFF unless enabled in Settings.
       # ==========================================================
 
-      - name: Build Super Redux-Redux FPS Diagnosis v9 FIXED
+      - name: Build Super Redux-Redux FPS Diagnosis v9 FIXED 2
         shell: bash
         run: |
           set +e
@@ -3320,15 +3454,18 @@ jobs:
 
           echo
           echo "======================================"
-          echo "SUPER R-R FPS DIAGNOSIS v9 FIXED"
+          echo "SUPER R-R FPS DIAGNOSIS v9 FIXED 2"
           echo "======================================"
           echo
-          echo "Modern GL FORCED"
           echo "ARM64"
+          echo "Modern GL forced"
           echo "O3"
           echo "Thin LTO"
           echo "72% framebuffer"
-          echo "GML profiler compiled in"
+          echo "High resolution OFF"
+          echo "Opcode profiler OFF"
+          echo "Tracing OFF"
+          echo "Stub logs OFF"
           echo "GML profiler OFF by default"
           echo
 
@@ -3347,7 +3484,7 @@ jobs:
             BUTTERSCOTCH_COMMIT_DATE="$DATE" \
             2>&1 \
             | tee \
-              "$GITHUB_WORKSPACE/v9-fixed-build.log"
+              "$GITHUB_WORKSPACE/v9-fixed2-build.log"
 
           STATUS=${PIPESTATUS[0]}
 
@@ -3362,7 +3499,7 @@ jobs:
               -n \
               -E \
               "error:|fatal error:|ERROR:" \
-              "$GITHUB_WORKSPACE/v9-fixed-build.log" \
+              "$GITHUB_WORKSPACE/v9-fixed2-build.log" \
               | tail \
                   -200 \
               || true
@@ -3373,7 +3510,9 @@ jobs:
           fi
 
           echo
+          echo "======================================"
           echo "BUILD FINISHED"
+          echo "======================================"
 
           find build \
             -maxdepth 2 \
@@ -3398,39 +3537,28 @@ jobs:
 
           echo
           echo "Binary:"
-
           file "$BIN"
 
           echo
           echo "Architecture:"
-
-          lipo \
-            -info \
-            "$BIN" \
-            || true
+          lipo -info "$BIN" || true
 
           echo
           echo "IPA:"
-
-          ls \
-            -lh \
-            "$IPA"
+          ls -lh "$IPA"
 
           echo
           echo "Bundled data.win:"
 
-          unzip \
-            -l \
-            "$IPA" \
-            | grep \
-                -i \
-                "BundledGame/data.win"
+          unzip -l "$IPA" \
+            | grep -i \
+              "BundledGame/data.win"
 
       # ==========================================================
       # OUTPUT
       # ==========================================================
 
-      - name: Prepare Super RR v9 FIXED
+      - name: Prepare Super RR v9 FIXED 2
         shell: bash
         run: |
           set -e
@@ -3440,98 +3568,113 @@ jobs:
 
           cp \
             "$GITHUB_WORKSPACE/Butterscotch/build/butterscotch.ipa" \
-            "$GITHUB_WORKSPACE/output/Super-Redux-Redux-iOS-v9-FPS-Diagnosis-FIXED.ipa"
+            "$GITHUB_WORKSPACE/output/Super-Redux-Redux-iOS-v9-FPS-Diagnosis-FIXED2.ipa"
 
           cat > \
             "$GITHUB_WORKSPACE/output/README.txt" \
             <<'EOF'
           SUPER REDUX-REDUX iOS
-          FPS DIAGNOSIS v9 FIXED
-          ======================
+          FPS DIAGNOSIS v9 FIXED 2
+          ========================
 
-          NORMAL PLAY
+          NORMAL MODE
+          -----------
 
           GML Profiler is OFF by default.
 
-          First test FPS normally:
+          First test normally:
 
-          - mask screen
-          - normal level
-          - enemies
+          Mask screen
+          Normal level
+          Level with enemies
 
 
           PERFORMANCE
+          -----------
 
           Modern GL forced
           ARM64
           O3
           Thin LTO
-          72% framebuffer
-          high resolution OFF
-          VM optimization attempted
-          GL optimization attempted
+          72% internal framebuffer
+          High resolution OFF
+
+          GL performance patches attempted
+          VM performance patches attempted
+
+          Opcode profiler OFF
+          Tracing OFF
+          Stub logs OFF
 
 
-          IF FPS IS STILL BAD
+          PROFILER
+          --------
+
+          If FPS is still bad:
 
           Open Settings.
 
-          Enable:
+          Turn on:
 
           GML Profiler
 
           Save settings.
 
-          Play around 20-30 seconds
-          on the mask screen.
+          Run mask screen
+          for about 20-30 seconds.
 
-          Then play around 20-30 seconds
-          on a level with enemies.
+          Then run a level with enemies
+          for about 20-30 seconds.
 
-          Look for:
+          The profiler writes:
 
           SuperRR-profile.txt
 
-          in the app Documents / save folder.
-
-          Send that file to ChatGPT.
+          to the Super R-R save folder.
 
 
           CONTROLS
+          --------
 
           LEFT STICK
-          movement
+          W / A / S / D
 
           RIGHT LOOK
-          look / aim
+          Aim / look
+
+          TOUCH GAME AREA
+          Direct aim
 
           A
-          shoot / punch / Enter
+          Shoot / punch / Enter
 
           X
-          pickup / throw
+          Pickup / throw
 
           C
-          interaction
+          Interaction
 
           R
-          restart
+          Restart
 
           LOOK
           Shift
 
           LOCK
-          middle mouse
+          Middle mouse
 
           II
-          pause
+          Pause / Escape
 
           FPS
-          real FPS counter
+          Real FPS counter
 
 
-          IPA unsigned/ad-hoc.
+          IPA is unsigned/ad-hoc.
           EOF
+
+          echo
+          echo "Output:"
 
           ls -lh \
             "$GITHUB_WORKSPACE/output"
@@ -3540,12 +3683,12 @@ jobs:
       # UPLOAD
       # ==========================================================
 
-      - name: Upload Super RR v9 FIXED
+      - name: Upload Super RR v9 FIXED 2
         uses: actions/upload-artifact@v4
         with:
-          name: super-redux-redux-ios-v9-FPS-Diagnosis-FIXED
+          name: super-redux-redux-ios-v9-FPS-Diagnosis-FIXED2
           path: |
-            output/Super-Redux-Redux-iOS-v9-FPS-Diagnosis-FIXED.ipa
+            output/Super-Redux-Redux-iOS-v9-FPS-Diagnosis-FIXED2.ipa
             output/README.txt
           if-no-files-found: error
           retention-days: 7
@@ -3558,13 +3701,13 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: super-rr-v9-fixed-failed
+          name: super-rr-v9-fixed2-failed
           path: |
             Butterscotch/src/ios/main.c
             Butterscotch/src/vm_builtins.c
             Butterscotch/src/loop.c
             Butterscotch/src/math_compat.h
             Butterscotch/compat/config.mk
-            v9-fixed-build.log
+            v9-fixed2-build.log
           if-no-files-found: ignore
           retention-days: 7
