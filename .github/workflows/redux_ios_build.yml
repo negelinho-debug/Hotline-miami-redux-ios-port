@@ -1,4 +1,4 @@
-name: Super R-R iOS v11.3 - BUILD UNBLOCKED + MAX FPS
+name: Super R-R iOS v11.4 - SAFE BUILD + AUTO FALLBACK
 
 on:
   workflow_dispatch:
@@ -247,6 +247,13 @@ jobs:
             echo "Info.plist not found yet; continuing because the iOS Makefile may generate it later."
           fi
 
+      - name: Backup known-good iOS source before extra tuning
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "$GITHUB_WORKSPACE/Butterscotch/src/ios/main.c"              "$RUNNER_TEMP/superrr-main-known-good.c"
+          echo "Backed up main.c before extra v11 tuning."
+
       - name: Apply FINAL 60 FPS performance tuning
         shell: bash
         run: |
@@ -256,7 +263,6 @@ jobs:
 
           python3 <<'PY'
           from pathlib import Path
-          import re
 
           main = Path("Butterscotch/src/ios/main.c")
 
@@ -265,34 +271,14 @@ jobs:
 
           s = main.read_text(encoding="utf-8")
 
-          pat = re.compile(
-              r'(bool\\s+platformHandleEvents\\s*\\(\\s*void\\s*\\)\\s*\\{\\s*)'
-              r'bsPollGameControllers\\s*\\(\\s*\\)\\s*;\\s*',
-              re.MULTILINE
-          )
-          s, count = pat.subn(r'\\1', s, count=1)
-          if count:
-              print("Removed physical controller polling.")
-
+          # SAFE ONLY: no regex replacing whole C/Obj-C function bodies.
           if "targetScale *= 0.72f;" in s:
               s = s.replace("targetScale *= 0.72f;", "targetScale *= 0.60f;", 1)
               print("Framebuffer: 72% -> 60%.")
           elif "targetScale *= 0.60f;" in s:
               print("Framebuffer already 60%.")
           else:
-              print("WARNING: framebuffer scale marker not found; keeping existing scale.")
-
-          highres = re.compile(
-              r'static\\s+bool\\s+bsLoadHighResEnabled\\s*\\(\\s*void\\s*\\)\\s*\\{.*?\\n\\}',
-              re.DOTALL
-          )
-          replacement = """static bool bsLoadHighResEnabled(void) {
-              return false;
-          }"""
-          s2, count = highres.subn(replacement, s, count=1)
-          if count:
-              s = s2
-              print("High-resolution mode forced OFF.")
+              print("Framebuffer marker not found; leaving source unchanged.")
 
           main.write_text(s, encoding="utf-8")
           PY
@@ -358,41 +344,92 @@ jobs:
           make distclean || true
           rm -rf build
 
-      - name: Build Super R-R iOS IPA
+      - name: Build Super R-R iOS IPA with automatic fallback
         shell: bash
         run: |
+          set +e
           set -o pipefail
 
           cd "$GITHUB_WORKSPACE/Butterscotch"
 
           HASH="$(git rev-parse --short HEAD)"
           DATE="$(git show -s --format=%cs HEAD)"
+          LOG1="$GITHUB_WORKSPACE/super-rr-v11.4-build-primary.log"
+          LOG2="$GITHUB_WORKSPACE/super-rr-v11.4-build-fallback.log"
 
-          make \
-            -j4 \
-            OS=iOS \
-            CC="$IOS_CC" \
-            CFLAGS="-O3 -DNDEBUG -flto=thin -fomit-frame-pointer -fno-math-errno -ffp-contract=fast ${CPU_FLAGS:-}" \
-            LDFLAGS="-flto=thin -Wl,-dead_strip" \
-            DISABLE_WAD14=1 \
-            DISABLE_WAD17=1 \
-            DISABLE_VM_GML_PROFILER=1 \
-            DISABLE_VM_OPCODE_PROFILER=1 \
-            DISABLE_VM_STUB_LOGS=1 \
-            DISABLE_VM_TRACING=1 \
-            BUTTERSCOTCH_COMMIT_HASH="$HASH" \
-            BUTTERSCOTCH_COMMIT_DATE="$DATE" \
-            2>&1 | tee "$GITHUB_WORKSPACE/super-rr-v11.3-build.log"
+          build_once() {
+            LOG="$1"
+            make               -j4               OS=iOS               CC="$IOS_CC"               CFLAGS="-O3 -DNDEBUG -flto=thin -fomit-frame-pointer -fno-math-errno -ffp-contract=fast ${CPU_FLAGS:-}"               LDFLAGS="-flto=thin -Wl,-dead_strip"               DISABLE_WAD14=1               DISABLE_WAD17=1               DISABLE_VM_GML_PROFILER=1               DISABLE_VM_OPCODE_PROFILER=1               DISABLE_VM_STUB_LOGS=1               DISABLE_VM_TRACING=1               BUTTERSCOTCH_COMMIT_HASH="$HASH"               BUTTERSCOTCH_COMMIT_DATE="$DATE"               2>&1 | tee "$LOG"
+            return ${PIPESTATUS[0]}
+          }
 
-          STATUS=${PIPESTATUS[0]}
+          echo "===== PRIMARY BUILD: SAFE 60% TUNING ====="
+          build_once "$LOG1"
+          STATUS=$?
 
           if [ "$STATUS" -ne 0 ]; then
-            echo "===== REAL BUILD ERRORS ====="
-            grep -nE "error:|fatal error:|ERROR:" \
-              "$GITHUB_WORKSPACE/super-rr-v11.3-build.log" \
-              | tail -200 || true
-            exit "$STATUS"
+            echo
+            echo "===== PRIMARY BUILD FAILED ====="
+            echo "First compiler errors:"
+            grep -nE '(^|[[:space:]])(fatal )?error:' "$LOG1" | head -40 || true
+
+            echo
+            echo "===== ERROR CONTEXT ====="
+            python3 - "$LOG1" <<'PY'
+          from pathlib import Path
+          import re, sys
+          p = Path(sys.argv[1])
+          lines = p.read_text(errors="replace").splitlines()
+          hits = [i for i, line in enumerate(lines) if re.search(r'(^|\s)(fatal )?error:', line)]
+          if not hits:
+              print("No compiler error line detected; see full log artifact.")
+          else:
+              i = hits[0]
+              for j in range(max(0, i-8), min(len(lines), i+14)):
+                  print(f"{j+1}: {lines[j]}")
+          PY
+
+            echo
+            echo "===== FALLBACK ====="
+            echo "Restoring main.c from immediately after the recovered known-good patches."
+
+            cp "$RUNNER_TEMP/superrr-main-known-good.c"                "$GITHUB_WORKSPACE/Butterscotch/src/ios/main.c"
+
+            make distclean >/dev/null 2>&1 || true
+            rm -rf build
+
+            build_once "$LOG2"
+            STATUS2=$?
+
+            if [ "$STATUS2" -ne 0 ]; then
+              echo
+              echo "===== FALLBACK BUILD ALSO FAILED ====="
+              grep -nE '(^|[[:space:]])(fatal )?error:' "$LOG2" | head -60 || true
+
+              echo
+              echo "===== FALLBACK FIRST ERROR CONTEXT ====="
+              python3 - "$LOG2" <<'PY'
+          from pathlib import Path
+          import re, sys
+          p = Path(sys.argv[1])
+          lines = p.read_text(errors="replace").splitlines()
+          hits = [i for i, line in enumerate(lines) if re.search(r'(^|\s)(fatal )?error:', line)]
+          if not hits:
+              print("No compiler error line detected; inspect the uploaded log.")
+          else:
+              i = hits[0]
+              for j in range(max(0, i-10), min(len(lines), i+16)):
+                  print(f"{j+1}: {lines[j]}")
+          PY
+              exit "$STATUS2"
+            fi
+
+            echo "FALLBACK BUILD SUCCEEDED."
+          else
+            echo "PRIMARY BUILD SUCCEEDED."
           fi
+
+          exit 0
 
       - name: Verify IPA
         shell: bash
@@ -421,10 +458,10 @@ jobs:
 
           cp \
             "$GITHUB_WORKSPACE/Butterscotch/build/butterscotch.ipa" \
-            "$OUT/Super-R-R-iOS-v11.3-60FPS.ipa"
+            "$OUT/Super-R-R-iOS-v11.4-60FPS.ipa"
 
           cat > "$OUT/README.txt" <<'EOF'
-          SUPER R-R iOS v11.3
+          SUPER R-R iOS v11.4
           =================
 
           Target: iPhone 12 / ARM64 / stable 60 FPS.
@@ -438,9 +475,9 @@ jobs:
       - name: Upload Super R-R IPA
         uses: actions/upload-artifact@v4
         with:
-          name: Super-R-R-iOS-v11.3-60FPS-IPA
+          name: Super-R-R-iOS-v11.4-60FPS-IPA
           path: |
-            output/Super-R-R-iOS-v11.3-60FPS.ipa
+            output/Super-R-R-iOS-v11.4-60FPS.ipa
             output/README.txt
           if-no-files-found: error
           retention-days: 7
@@ -450,9 +487,10 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: Super-R-R-v11.3-FAILED
+          name: Super-R-R-v11.4-FAILED
           path: |
-            super-rr-v11.3-build.log
+            super-rr-v11.4-build-primary.log
+            super-rr-v11.4-build-fallback.log
             Butterscotch/src/ios/main.c
             Butterscotch/src/vm_builtins.c
             Butterscotch/src/loop.c
