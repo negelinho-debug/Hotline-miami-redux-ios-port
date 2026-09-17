@@ -1,4 +1,4 @@
-name: Super R-R iOS v11.4 - SAFE BUILD + AUTO FALLBACK
+name: Super R-R iOS v11.5 - HOSTFRAMEBUFFER FIX
 
 on:
   workflow_dispatch:
@@ -247,6 +247,56 @@ jobs:
             echo "Info.plist not found yet; continuing because the iOS Makefile may generate it later."
           fi
 
+      - name: Fix iOS renderer compatibility - remove invalid hostFramebuffer access
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          MAIN="$GITHUB_WORKSPACE/Butterscotch/src/ios/main.c"
+          test -f "$MAIN"
+
+          echo "===== FIX hostFramebuffer COMPILE ERROR ====="
+          echo "Before:"
+          grep -n "hostFramebuffer" "$MAIN" || true
+
+          python3 - "$MAIN" <<'PY'
+          from pathlib import Path
+          import sys
+
+          p = Path(sys.argv[1])
+          lines = p.read_text(encoding="utf-8").splitlines()
+
+          kept = []
+          removed = []
+
+          for line in lines:
+              # The recovered rendering patch wrote to a field that does not
+              # exist in the current GRenderer struct:
+              # ((GRenderer *)g_runner->renderer)->hostFramebuffer = framebuffer;
+              if "->hostFramebuffer" in line and "= framebuffer" in line:
+                  removed.append(line)
+                  kept.append("    /* iOS v11.5: invalid hostFramebuffer assignment removed; current GRenderer has no such member. */")
+              else:
+                  kept.append(line)
+
+          if not removed:
+              print("No hostFramebuffer assignment found; nothing to remove.")
+          else:
+              print("Removed invalid line(s):")
+              for line in removed:
+                  print(line)
+
+          p.write_text("\n".join(kept) + "\n", encoding="utf-8")
+          PY
+
+          echo "After:"
+          if grep -n "->hostFramebuffer" "$MAIN"; then
+            echo "ERROR: invalid hostFramebuffer access still exists."
+            exit 1
+          fi
+
+          echo "hostFramebuffer compatibility fix applied."
+
       - name: Backup known-good iOS source before extra tuning
         shell: bash
         run: |
@@ -354,8 +404,8 @@ jobs:
 
           HASH="$(git rev-parse --short HEAD)"
           DATE="$(git show -s --format=%cs HEAD)"
-          LOG1="$GITHUB_WORKSPACE/super-rr-v11.4-build-primary.log"
-          LOG2="$GITHUB_WORKSPACE/super-rr-v11.4-build-fallback.log"
+          LOG1="$GITHUB_WORKSPACE/super-rr-v11.5-build-primary.log"
+          LOG2="$GITHUB_WORKSPACE/super-rr-v11.5-build-fallback.log"
 
           build_once() {
             LOG="$1"
@@ -458,10 +508,10 @@ jobs:
 
           cp \
             "$GITHUB_WORKSPACE/Butterscotch/build/butterscotch.ipa" \
-            "$OUT/Super-R-R-iOS-v11.4-60FPS.ipa"
+            "$OUT/Super-R-R-iOS-v11.5-60FPS.ipa"
 
           cat > "$OUT/README.txt" <<'EOF'
-          SUPER R-R iOS v11.4
+          SUPER R-R iOS v11.5
           =================
 
           Target: iPhone 12 / ARM64 / stable 60 FPS.
@@ -475,9 +525,9 @@ jobs:
       - name: Upload Super R-R IPA
         uses: actions/upload-artifact@v4
         with:
-          name: Super-R-R-iOS-v11.4-60FPS-IPA
+          name: Super-R-R-iOS-v11.5-60FPS-IPA
           path: |
-            output/Super-R-R-iOS-v11.4-60FPS.ipa
+            output/Super-R-R-iOS-v11.5-60FPS.ipa
             output/README.txt
           if-no-files-found: error
           retention-days: 7
@@ -487,10 +537,10 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: Super-R-R-v11.4-FAILED
+          name: Super-R-R-v11.5-FAILED
           path: |
-            super-rr-v11.4-build-primary.log
-            super-rr-v11.4-build-fallback.log
+            super-rr-v11.5-build-primary.log
+            super-rr-v11.5-build-fallback.log
             Butterscotch/src/ios/main.c
             Butterscotch/src/vm_builtins.c
             Butterscotch/src/loop.c
