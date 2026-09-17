@@ -1,4 +1,4 @@
-name: Super R-R iOS v11.5 - HOSTFRAMEBUFFER FIX
+name: Super R-R iOS v11.6 - DIRECT GAME + LANDSCAPE
 
 on:
   workflow_dispatch:
@@ -247,6 +247,165 @@ jobs:
             echo "Info.plist not found yet; continuing because the iOS Makefile may generate it later."
           fi
 
+      - name: Force real landscape app orientation
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cd "$GITHUB_WORKSPACE/Butterscotch"
+
+          PLIST="$(find . -type f -name 'Info.plist' | grep -E '/ios/|artifacts/ios|build' | head -1 || true)"
+          if [ -z "$PLIST" ]; then
+            PLIST="$(find . -type f -name 'Info.plist' | head -1 || true)"
+          fi
+
+          if [ -n "$PLIST" ] && [ -f "$PLIST" ]; then
+            /usr/libexec/PlistBuddy -c "Delete :UISupportedInterfaceOrientations" "$PLIST" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations array" "$PLIST"
+            /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationLandscapeRight" "$PLIST"
+            /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations:1 string UIInterfaceOrientationLandscapeLeft" "$PLIST"
+
+            /usr/libexec/PlistBuddy -c "Delete :UISupportedInterfaceOrientations~ipad" "$PLIST" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations~ipad array" "$PLIST"
+            /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations~ipad:0 string UIInterfaceOrientationLandscapeRight" "$PLIST"
+            /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations~ipad:1 string UIInterfaceOrientationLandscapeLeft" "$PLIST"
+
+            /usr/libexec/PlistBuddy -c "Set :UIRequiresFullScreen true" "$PLIST" 2>/dev/null \
+              || /usr/libexec/PlistBuddy -c "Add :UIRequiresFullScreen bool true" "$PLIST"
+
+            echo "Landscape Info.plist patched."
+            plutil -p "$PLIST" | grep -A8 -B2 "UISupportedInterfaceOrientations" || true
+          fi
+
+      - name: Remove Butterscotch launcher and auto-start Super R-R
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          MAIN="$GITHUB_WORKSPACE/Butterscotch/src/ios/main.c"
+          test -f "$MAIN"
+
+          python3 - "$MAIN" <<'PY'
+          from pathlib import Path
+          import sys
+
+          p = Path(sys.argv[1])
+          s = p.read_text(encoding="utf-8")
+
+          needle = "applicationDidFinishLaunching:"
+          hit = s.find(needle)
+          if hit < 0:
+              raise SystemExit("ERROR: applicationDidFinishLaunching: method not found")
+
+          start = s.rfind("\n-", 0, hit)
+          if start < 0:
+              start = s.rfind("-", 0, hit)
+          else:
+              start += 1
+
+          open_brace = s.find("{", hit)
+          if open_brace < 0:
+              raise SystemExit("ERROR: opening brace for applicationDidFinishLaunching not found")
+
+          depth = 0
+          in_string = False
+          quote = ""
+          escape = False
+          end = None
+
+          for i in range(open_brace, len(s)):
+              ch = s[i]
+
+              if in_string:
+                  if escape:
+                      escape = False
+                  elif ch == "\\":
+                      escape = True
+                  elif ch == quote:
+                      in_string = False
+                  continue
+
+              if ch in ("'", '"'):
+                  in_string = True
+                  quote = ch
+                  continue
+
+              if ch == "{":
+                  depth += 1
+              elif ch == "}":
+                  depth -= 1
+                  if depth == 0:
+                      end = i + 1
+                      break
+
+          if end is None:
+              raise SystemExit("ERROR: could not find end of applicationDidFinishLaunching")
+
+          replacement = r'''- (void)applicationDidFinishLaunching:(UIApplication *)application {
+              [application setStatusBarHidden:YES];
+
+              [[UIDevice currentDevice] beginGeneratingDeviceOrientationNotifications];
+              [[NSNotificationCenter defaultCenter]
+                  addObserver:self
+                     selector:@selector(orientationChanged:)
+                         name:UIDeviceOrientationDidChangeNotification
+                       object:nil];
+
+              self.window = [[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
+              usingRootViewController = [self.window respondsToSelector:@selector(setRootViewController:)];
+
+              NSFileManager *fm = [NSFileManager defaultManager];
+              NSArray *roots = _bsGamesRootsToScan();
+
+              if ([roots count] == 0) {
+                  NSLog(@"Super R-R: no writable game root found.");
+                  [self.window makeKeyAndVisible];
+                  return;
+              }
+
+              NSString *gamesDir = [[roots objectAtIndex:0] stringByAppendingPathComponent:@"games"];
+              NSString *gameDir = [gamesDir stringByAppendingPathComponent:@"Super R-R"];
+              NSString *dataPath = [gameDir stringByAppendingPathComponent:@"data.win"];
+              NSString *bundled = [[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:@"BundledGame"];
+
+              [fm createDirectoryAtPath:gamesDir
+                   withIntermediateDirectories:YES
+                                    attributes:nil
+                                         error:nil];
+
+              if (![fm fileExistsAtPath:dataPath]) {
+                  if ([fm fileExistsAtPath:gameDir]) {
+                      [fm removeItemAtPath:gameDir error:nil];
+                  }
+
+                  NSError *copyError = nil;
+                  if (![fm copyItemAtPath:bundled toPath:gameDir error:&copyError]) {
+                      NSLog(@"Super R-R direct install failed: %@", copyError);
+                  } else {
+                      NSLog(@"Super R-R direct install OK.");
+                  }
+              }
+
+              [self.window makeKeyAndVisible];
+
+              if ([fm fileExistsAtPath:dataPath]) {
+                  NSLog(@"Super R-R: launching directly.");
+                  [self startGameWithPath:gameDir];
+              } else {
+                  NSLog(@"Super R-R: data.win missing after install.");
+              }
+          }'''
+
+          s = s[:start] + replacement + s[end:]
+          p.write_text(s, encoding="utf-8")
+
+          print("Replaced applicationDidFinishLaunching with direct Super R-R startup.")
+          PY
+
+          echo "===== DIRECT START CHECK ====="
+          grep -n "Super R-R: launching directly" "$MAIN"
+          grep -n "applicationDidFinishLaunching" "$MAIN" | head -3
+
       - name: Fix iOS renderer compatibility - remove invalid hostFramebuffer access
         shell: bash
         run: |
@@ -404,8 +563,8 @@ jobs:
 
           HASH="$(git rev-parse --short HEAD)"
           DATE="$(git show -s --format=%cs HEAD)"
-          LOG1="$GITHUB_WORKSPACE/super-rr-v11.5-build-primary.log"
-          LOG2="$GITHUB_WORKSPACE/super-rr-v11.5-build-fallback.log"
+          LOG1="$GITHUB_WORKSPACE/super-rr-v11.6-build-primary.log"
+          LOG2="$GITHUB_WORKSPACE/super-rr-v11.6-build-fallback.log"
 
           build_once() {
             LOG="$1"
@@ -508,10 +667,10 @@ jobs:
 
           cp \
             "$GITHUB_WORKSPACE/Butterscotch/build/butterscotch.ipa" \
-            "$OUT/Super-R-R-iOS-v11.5-60FPS.ipa"
+            "$OUT/Super-R-R-iOS-v11.6-DIRECT-LANDSCAPE.ipa"
 
           cat > "$OUT/README.txt" <<'EOF'
-          SUPER R-R iOS v11.5
+          SUPER R-R iOS v11.6
           =================
 
           Target: iPhone 12 / ARM64 / stable 60 FPS.
@@ -525,9 +684,9 @@ jobs:
       - name: Upload Super R-R IPA
         uses: actions/upload-artifact@v4
         with:
-          name: Super-R-R-iOS-v11.5-60FPS-IPA
+          name: Super-R-R-iOS-v11.6-DIRECT-LANDSCAPE-IPA
           path: |
-            output/Super-R-R-iOS-v11.5-60FPS.ipa
+            output/Super-R-R-iOS-v11.6-DIRECT-LANDSCAPE.ipa
             output/README.txt
           if-no-files-found: error
           retention-days: 7
@@ -537,10 +696,10 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: Super-R-R-v11.5-FAILED
+          name: Super-R-R-v11.6-FAILED
           path: |
-            super-rr-v11.5-build-primary.log
-            super-rr-v11.5-build-fallback.log
+            super-rr-v11.6-build-primary.log
+            super-rr-v11.6-build-fallback.log
             Butterscotch/src/ios/main.c
             Butterscotch/src/vm_builtins.c
             Butterscotch/src/loop.c
