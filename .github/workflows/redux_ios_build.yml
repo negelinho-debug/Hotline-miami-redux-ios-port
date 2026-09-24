@@ -1,4 +1,4 @@
-name: Super R-R iOS v11.7 - DIRECT GAME + LANDSCAPE
+name: Super R-R iOS v11.8 - CRASH FIX + SAFE DIRECT + NEW ICON
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   ios:
-    name: Build Super R-R IPA
+    name: Build Super R-R v11.8 IPA
     runs-on: macos-14
     timeout-minutes: 60
 
@@ -22,84 +22,119 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Recover last known-good Super R-R workflow
+      # ==========================================================
+      # RECOVER THE OLD WORKING BASE
+      # ==========================================================
+
+      - name: Recover known-good Super R-R base
         shell: bash
         run: |
           set -euo pipefail
 
-          TARGET=".github/workflows/redux_ios_build.yml"
-          OUT="$RUNNER_TEMP/redux_known_good.yml"
+          BASE="$RUNNER_TEMP/redux_known_good.yml"
+          BASE_COMMIT="57b87ada673b83c7e2f9b0c91582d0109dae580d"
 
-          rm -f "$OUT"
+          git cat-file -e "${BASE_COMMIT}^{commit}"
 
-          echo "Searching git history for the last workflow that still contains the real build steps..."
+          git show \
+            "${BASE_COMMIT}:.github/workflows/redux_ios_build.yml" \
+            > "$BASE"
 
-          for COMMIT in $(git log --format='%H' --all -- "$TARGET"); do
-            CANDIDATE="$RUNNER_TEMP/redux_candidate.yml"
+          test -s "$BASE"
 
-            if ! git show "$COMMIT:$TARGET" > "$CANDIDATE" 2>/dev/null; then
-              continue
-            fi
+          echo "BASE_WORKFLOW=$BASE" >> "$GITHUB_ENV"
 
-            if python3 - "$CANDIDATE" <<'PY'
+          echo "Recovered:"
+          grep -n '^      - name:' "$BASE" | head -80
+
+      # ==========================================================
+      # PIN THE SAME IOS RUNNER USED BY THE WORKING V11.5 BUILD
+      # ==========================================================
+
+      - name: Pin known-good Butterscotch iOS revision
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 - "$BASE_WORKFLOW" <<'PY'
           from pathlib import Path
-          import re, sys
+          import sys
 
           p = Path(sys.argv[1])
-          names = []
 
-          for line in p.read_text(encoding="utf-8").splitlines():
-              m = re.match(r'^      - name:\s*(.+?)\s*$', line)
-              if m:
-                  names.append(m.group(1).strip('"\''))
+          lines = p.read_text(
+              encoding="utf-8"
+          ).splitlines()
 
-          required = {
-              "Download Super Redux-Redux",
-              "Download Butterscotch iOS",
-              "Apply GL and VM performance patches",
-              "Prepare iPhone compiler",
-              "Set app info",
-              "Bundle complete Super Redux-Redux",
-              "Patch Redux rendering",
-              "Patch Redux gameplay controls",
-              "Add R LOOK LOCK",
-              "Add PAUSE FPS and right LOOK",
-              "Force Modern GL and performance mode",
-              "Fix iOS math compatibility",
-              "Add automatic game installer",
-          }
+          out = []
+          inside = False
+          inserted = False
 
-          missing = sorted(required - set(names))
+          pin_lines = [
+              "",
+              "          # v11.8: lock to the exact iOS runner used by v11.5",
+              '          PIN="4c1a9ca6555b32ab84a09be9351ae1946fa0648b"',
+              "",
+              "          git fetch --depth 200 origin ios || true",
+              "",
+              '          if ! git cat-file -e "$PIN^{commit}" 2>/dev/null; then',
+              "            git fetch --unshallow origin ios || git fetch origin ios",
+              "          fi",
+              "",
+              '          git checkout --detach "$PIN"',
+              "",
+              '          ACTUAL="$(git rev-parse HEAD)"',
+              '          echo "Pinned Butterscotch: $ACTUAL"',
+              "",
+              '          if [ "$ACTUAL" != "$PIN" ]; then',
+              '            echo "ERROR: wrong Butterscotch commit"',
+              "            exit 1",
+              "          fi",
+          ]
 
-          if missing:
-              print("Skipping candidate; missing real steps:", ", ".join(missing))
-              raise SystemExit(1)
+          for line in lines:
 
-          print("REAL recovered steps found:")
+              if line.rstrip() == \
+                  "      - name: Download Butterscotch iOS":
+                  inside = True
 
-          for n in names:
-              if n in required:
-                  print("  -", n)
+              elif (
+                  inside
+                  and line.startswith("      - name: ")
+              ):
+                  inside = False
+
+              out.append(line)
+
+              if (
+                  inside
+                  and not inserted
+                  and line.strip()
+                      == 'cd "$GITHUB_WORKSPACE/Butterscotch"'
+              ):
+                  out.extend(pin_lines)
+                  inserted = True
+
+          if not inserted:
+              raise SystemExit(
+                  "ERROR: could not insert Butterscotch pin"
+              )
+
+          p.write_text(
+              "\n".join(out) + "\n",
+              encoding="utf-8"
+          )
+
+          print(
+              "Known-good Butterscotch pin inserted."
+          )
           PY
-            then
-              cp "$CANDIDATE" "$OUT"
-              echo "Recovered REAL known-good base from commit: $COMMIT"
-              break
-            fi
-          done
 
-          if [ ! -s "$OUT" ]; then
-            echo "ERROR: Could not recover the old working Super R-R workflow from git history."
-            git log --oneline --all -- "$TARGET" | head -30
-            exit 1
-          fi
+      # ==========================================================
+      # RUN ALL OLD WORKING SUPER R-R PATCHES
+      # ==========================================================
 
-          echo "BASE_WORKFLOW=$OUT" >> "$GITHUB_ENV"
-
-          echo "===== RECOVERED STEPS ====="
-          grep -n '^      - name:' "$OUT" | head -80
-
-      - name: Apply all known-good Super R-R base patches
+      - name: Apply known-good Super R-R patches
         shell: bash
         run: |
           set -euo pipefail
@@ -107,31 +142,43 @@ jobs:
           BASE="$BASE_WORKFLOW"
 
           reload_env() {
+
             if [ -f "$GITHUB_ENV" ]; then
+
               while IFS= read -r LINE; do
+
                 case "$LINE" in
                   *=*)
                     KEY="${LINE%%=*}"
+
                     case "$KEY" in
-                      *[!A-Za-z0-9_]*|'') ;;
-                      *) export "$LINE" ;;
+                      *[!A-Za-z0-9_]*|'')
+                        ;;
+                      *)
+                        export "$LINE"
+                        ;;
                     esac
                     ;;
                 esac
+
               done < "$GITHUB_ENV"
+
             fi
           }
 
           run_old_step() {
+
             STEP_NAME="$1"
-            TMP_SCRIPT="$RUNNER_TEMP/superrr-old-step.sh"
+            SCRIPT="$RUNNER_TEMP/redux-step.sh"
 
             echo
-            echo "=================================================="
-            echo "RUNNING RECOVERED STEP: $STEP_NAME"
-            echo "=================================================="
+            echo "========================================"
+            echo "RUN: $STEP_NAME"
+            echo "========================================"
 
-            python3 - "$BASE" "$STEP_NAME" "$TMP_SCRIPT" <<'PY'
+            python3 \
+              - "$BASE" "$STEP_NAME" "$SCRIPT" \
+              <<'PY'
           from pathlib import Path
           import sys
 
@@ -139,8 +186,12 @@ jobs:
           wanted = sys.argv[2]
           output = Path(sys.argv[3])
 
-          lines = workflow.read_text(encoding="utf-8").splitlines()
-          target = "      - name: " + wanted
+          lines = workflow.read_text(
+              encoding="utf-8"
+          ).splitlines()
+
+          target = \
+              "      - name: " + wanted
 
           start = None
 
@@ -150,195 +201,168 @@ jobs:
                   break
 
           if start is None:
-              raise SystemExit("ERROR: recovered step not found: " + wanted)
+              raise SystemExit(
+                  "ERROR: step missing: " + wanted
+              )
 
           run_index = None
 
-          for i in range(start + 1, len(lines)):
+          for i in range(
+              start + 1,
+              len(lines)
+          ):
+
               line = lines[i]
 
-              if line.startswith("      - name: "):
+              if line.startswith(
+                  "      - name: "
+              ):
                   break
 
-              if line.rstrip() == "        run: |":
+              if line.rstrip() == \
+                  "        run: |":
                   run_index = i
                   break
 
           if run_index is None:
-              raise SystemExit("ERROR: run block missing for: " + wanted)
+              raise SystemExit(
+                  "ERROR: run block missing: "
+                  + wanted
+              )
 
           code = []
 
-          for i in range(run_index + 1, len(lines)):
+          for i in range(
+              run_index + 1,
+              len(lines)
+          ):
+
               line = lines[i]
 
-              if line.startswith("      - name: "):
+              if line.startswith(
+                  "      - name: "
+              ):
                   break
 
               if line.strip() == "":
                   code.append("")
                   continue
 
-              if line.startswith("          "):
-                  code.append(line[10:])
+              if line.startswith(
+                  "          "
+              ):
+                  code.append(
+                      line[10:]
+                  )
                   continue
 
-              indent = len(line) - len(line.lstrip(" "))
+              indent = \
+                  len(line) - len(
+                      line.lstrip(" ")
+                  )
 
               if indent < 10:
                   break
 
-              code.append(line[10:])
+              code.append(
+                  line[10:]
+              )
 
           if not code:
-              raise SystemExit("ERROR: empty recovered run block: " + wanted)
+              raise SystemExit(
+                  "ERROR: empty step: "
+                  + wanted
+              )
 
           output.write_text(
-              chr(10).join(code) + chr(10),
+              "\n".join(code) + "\n",
               encoding="utf-8"
           )
 
-          print("Extracted recovered step:", wanted)
+          print(
+              "Extracted:",
+              wanted
+          )
           PY
 
-            chmod +x "$TMP_SCRIPT"
-            bash "$TMP_SCRIPT"
+            chmod +x "$SCRIPT"
+
+            bash "$SCRIPT"
+
             reload_env
 
             echo "DONE: $STEP_NAME"
           }
 
           run_old_step "Download Super Redux-Redux"
+
           run_old_step "Download Butterscotch iOS"
+
           run_old_step "Apply GL and VM performance patches"
+
           run_old_step "Prepare iPhone compiler"
+
           run_old_step "Set app info"
+
           run_old_step "Bundle complete Super Redux-Redux"
+
           run_old_step "Patch Redux rendering"
+
           run_old_step "Patch Redux gameplay controls"
+
           run_old_step "Add R LOOK LOCK"
+
           run_old_step "Add PAUSE FPS and right LOOK"
+
           run_old_step "Force Modern GL and performance mode"
+
           run_old_step "Fix iOS math compatibility"
+
           run_old_step "Add automatic game installer"
 
           echo
-          echo "=================================================="
-          echo "KNOWN-GOOD BASE RESTORED"
-          echo "=================================================="
+          echo "KNOWN-GOOD BASE COMPLETE"
 
-      - name: Force Super R-R app identity and 60 FPS iOS mode
+      # ==========================================================
+      # IOS APP SETTINGS
+      # ==========================================================
+
+      - name: Set v11.8 app info and 60 FPS mode
         shell: bash
         run: |
           set -euo pipefail
 
-          cd "$GITHUB_WORKSPACE/Butterscotch"
+          PLIST="$GITHUB_WORKSPACE/Butterscotch/artifacts/ios/assets/Info.plist"
 
-          PLIST="$(
-            find . -type f -name 'Info.plist' \
-              | grep -E '/ios/|artifacts/ios|build' \
-              | head -1 || true
-          )"
+          test -f "$PLIST"
 
-          if [ -z "$PLIST" ]; then
-            PLIST="$(find . -type f -name 'Info.plist' | head -1 || true)"
-          fi
+          /usr/libexec/PlistBuddy \
+            -c "Set :CFBundleDisplayName Super R-R" \
+            "$PLIST"
 
-          if [ -n "$PLIST" ] && [ -f "$PLIST" ]; then
-            echo "Patching: $PLIST"
+          /usr/libexec/PlistBuddy \
+            -c "Set :CFBundleName Super R-R" \
+            "$PLIST"
 
-            /usr/libexec/PlistBuddy \
-              -c "Set :CFBundleDisplayName Super R-R" \
-              "$PLIST" 2>/dev/null \
-              || /usr/libexec/PlistBuddy \
-                -c "Add :CFBundleDisplayName string Super R-R" \
-                "$PLIST"
+          /usr/libexec/PlistBuddy \
+            -c "Set :CFBundleIdentifier com.negelinho.superrr.ios" \
+            "$PLIST"
 
-            /usr/libexec/PlistBuddy \
-              -c "Set :CFBundleName Super R-R" \
-              "$PLIST" 2>/dev/null \
-              || /usr/libexec/PlistBuddy \
-                -c "Add :CFBundleName string Super R-R" \
-                "$PLIST"
-
-            /usr/libexec/PlistBuddy \
-              -c "Set :CADisableMinimumFrameDurationOnPhone true" \
-              "$PLIST" 2>/dev/null \
-              || /usr/libexec/PlistBuddy \
-                -c "Add :CADisableMinimumFrameDurationOnPhone bool true" \
-                "$PLIST"
-
-            plutil -p "$PLIST" | head -120
-          else
-            echo "Info.plist not found yet; continuing because the iOS Makefile may generate it later."
-          fi
-
-      - name: Force real landscape app orientation
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          cd "$GITHUB_WORKSPACE/Butterscotch"
-
-          PLIST="$(
-            find . -type f -name 'Info.plist' \
-              | grep -E '/ios/|artifacts/ios|build' \
-              | head -1 || true
-          )"
-
-          if [ -z "$PLIST" ]; then
-            PLIST="$(find . -type f -name 'Info.plist' | head -1 || true)"
-          fi
-
-          if [ -n "$PLIST" ] && [ -f "$PLIST" ]; then
-
-            /usr/libexec/PlistBuddy \
-              -c "Delete :UISupportedInterfaceOrientations" \
-              "$PLIST" 2>/dev/null || true
-
-            /usr/libexec/PlistBuddy \
-              -c "Add :UISupportedInterfaceOrientations array" \
+          /usr/libexec/PlistBuddy \
+            -c "Set :CADisableMinimumFrameDurationOnPhone true" \
+            "$PLIST" 2>/dev/null \
+            || /usr/libexec/PlistBuddy \
+              -c "Add :CADisableMinimumFrameDurationOnPhone bool true" \
               "$PLIST"
 
-            /usr/libexec/PlistBuddy \
-              -c "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationLandscapeRight" \
-              "$PLIST"
+          echo "Info.plist:"
+          plutil -p "$PLIST" | head -100
 
-            /usr/libexec/PlistBuddy \
-              -c "Add :UISupportedInterfaceOrientations:1 string UIInterfaceOrientationLandscapeLeft" \
-              "$PLIST"
+      # ==========================================================
+      # FIX THE COMPILE BUG FROM THE OLD RENDER PATCH
+      # ==========================================================
 
-            /usr/libexec/PlistBuddy \
-              -c "Delete :UISupportedInterfaceOrientations~ipad" \
-              "$PLIST" 2>/dev/null || true
-
-            /usr/libexec/PlistBuddy \
-              -c "Add :UISupportedInterfaceOrientations~ipad array" \
-              "$PLIST"
-
-            /usr/libexec/PlistBuddy \
-              -c "Add :UISupportedInterfaceOrientations~ipad:0 string UIInterfaceOrientationLandscapeRight" \
-              "$PLIST"
-
-            /usr/libexec/PlistBuddy \
-              -c "Add :UISupportedInterfaceOrientations~ipad:1 string UIInterfaceOrientationLandscapeLeft" \
-              "$PLIST"
-
-            /usr/libexec/PlistBuddy \
-              -c "Set :UIRequiresFullScreen true" \
-              "$PLIST" 2>/dev/null \
-              || /usr/libexec/PlistBuddy \
-                -c "Add :UIRequiresFullScreen bool true" \
-                "$PLIST"
-
-            echo "Landscape Info.plist patched."
-
-            plutil -p "$PLIST" \
-              | grep -A8 -B2 "UISupportedInterfaceOrientations" \
-              || true
-          fi
-
-      - name: Remove Butterscotch launcher and auto-start Super R-R
+      - name: Fix hostFramebuffer compatibility
         shell: bash
         run: |
           set -euo pipefail
@@ -352,28 +376,162 @@ jobs:
           import sys
 
           p = Path(sys.argv[1])
-          s = p.read_text(encoding="utf-8")
 
-          needle = "applicationDidFinishLaunching:"
-          hit = s.find(needle)
+          lines = p.read_text(
+              encoding="utf-8"
+          ).splitlines()
+
+          out = []
+          removed = 0
+
+          for line in lines:
+
+              if (
+                  "->hostFramebuffer" in line
+                  and "= framebuffer" in line
+              ):
+
+                  out.append(
+                      "    /* v11.8: invalid "
+                      "hostFramebuffer assignment removed */"
+                  )
+
+                  removed += 1
+
+              else:
+                  out.append(line)
+
+          p.write_text(
+              "\n".join(out) + "\n",
+              encoding="utf-8"
+          )
+
+          print(
+              "hostFramebuffer lines removed:",
+              removed
+          )
+          PY
+
+          if grep -n \
+            -- "->hostFramebuffer" \
+            "$MAIN"
+          then
+            echo "ERROR: hostFramebuffer access remains"
+            exit 1
+          fi
+
+      # ==========================================================
+      # PERFORMANCE
+      # ==========================================================
+
+      - name: Apply stable iPhone 12 performance tuning
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          MAIN="$GITHUB_WORKSPACE/Butterscotch/src/ios/main.c"
+
+          python3 - "$MAIN" <<'PY'
+          from pathlib import Path
+          import sys
+
+          p = Path(sys.argv[1])
+
+          s = p.read_text(
+              encoding="utf-8"
+          )
+
+          if "targetScale *= 0.72f;" in s:
+
+              s = s.replace(
+                  "targetScale *= 0.72f;",
+                  "targetScale *= 0.60f;",
+                  1
+              )
+
+              print(
+                  "Internal framebuffer: 72% -> 60%"
+              )
+
+          elif "targetScale *= 0.60f;" in s:
+
+              print(
+                  "Internal framebuffer already 60%"
+              )
+
+          else:
+
+              print(
+                  "No framebuffer scale marker found."
+              )
+
+          p.write_text(
+              s,
+              encoding="utf-8"
+          )
+          PY
+
+      # ==========================================================
+      # SAFE DIRECT START
+      #
+      # IMPORTANT:
+      # We DO NOT replace applicationDidFinishLaunching anymore.
+      # We keep the original menu/window/navigation initialization.
+      # Only after window is fully initialized do we start Super R-R.
+      # ==========================================================
+
+      - name: Add SAFE direct game launch
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          MAIN="$GITHUB_WORKSPACE/Butterscotch/src/ios/main.c"
+
+          test -f "$MAIN"
+
+          python3 - "$MAIN" <<'PY'
+          from pathlib import Path
+          import sys
+
+          p = Path(sys.argv[1])
+
+          s = p.read_text(
+              encoding="utf-8"
+          )
+
+          marker = \
+              "applicationDidFinishLaunching:"
+
+          hit = s.find(marker)
 
           if hit < 0:
               raise SystemExit(
-                  "ERROR: applicationDidFinishLaunching: method not found"
+                  "ERROR: applicationDidFinishLaunching not found"
               )
 
-          start = s.rfind("\n-", 0, hit)
+          start = s.rfind(
+              "\n-",
+              0,
+              hit
+          )
 
           if start < 0:
-              start = s.rfind("-", 0, hit)
+              start = s.rfind(
+                  "-",
+                  0,
+                  hit
+              )
           else:
               start += 1
 
-          open_brace = s.find("{", hit)
+          open_brace = s.find(
+              "{",
+              hit
+          )
 
           if open_brace < 0:
               raise SystemExit(
-                  "ERROR: opening brace for applicationDidFinishLaunching not found"
+                  "ERROR: launch method opening brace missing"
               )
 
           depth = 0
@@ -382,16 +540,24 @@ jobs:
           escape = False
           end = None
 
-          for i in range(open_brace, len(s)):
+          for i in range(
+              open_brace,
+              len(s)
+          ):
+
               ch = s[i]
 
               if in_string:
+
                   if escape:
                       escape = False
+
                   elif ch == "\\":
                       escape = True
+
                   elif ch == quote:
                       in_string = False
+
                   continue
 
               if ch in ("'", '"'):
@@ -411,106 +577,72 @@ jobs:
 
           if end is None:
               raise SystemExit(
-                  "ERROR: could not find end of applicationDidFinishLaunching"
+                  "ERROR: launch method end missing"
               )
 
-          replacement = r'''- (void)applicationDidFinishLaunching:(UIApplication *)application {
-              [application setStatusBarHidden:YES];
+          method = s[start:end]
 
-              [[UIDevice currentDevice]
-                  beginGeneratingDeviceOrientationNotifications];
+          needle = \
+              "    [window makeKeyAndVisible];"
 
-              [[NSNotificationCenter defaultCenter]
-                  addObserver:self
-                     selector:@selector(orientationChanged:)
-                         name:UIDeviceOrientationDidChangeNotification
-                       object:nil];
+          if method.count(needle) != 1:
+              raise SystemExit(
+                  "ERROR: makeKeyAndVisible marker count is not 1"
+              )
 
-              self.window = [[UIWindow alloc]
-                  initWithFrame:[[UIScreen mainScreen] bounds]];
+          direct = r'''
+              [window makeKeyAndVisible];
 
-              usingRootViewController =
-                  [self.window respondsToSelector:
-                      @selector(setRootViewController:)];
+              /* v11.8 SAFE DIRECT START:
+               * window + gameListVC + navController already exist here.
+               * This avoids the v11.7 startup crash caused by replacing
+               * the complete applicationDidFinishLaunching method. */
 
-              NSFileManager *fm =
-                  [NSFileManager defaultManager];
-
-              NSArray *roots =
+              NSArray *rrRoots =
                   bsGamesRootsToScan();
 
-              if ([roots count] == 0) {
-                  NSLog(@"Super R-R: no writable game root found.");
-                  [self.window makeKeyAndVisible];
-                  return;
-              }
+              if ([rrRoots count] > 0) {
 
-              NSString *gamesDir =
-                  [[roots objectAtIndex:0]
-                      stringByAppendingPathComponent:@"games"];
+                  NSString *rrGames =
+                      [[rrRoots objectAtIndex:0]
+                          stringByAppendingPathComponent:@"games"];
 
-              NSString *gameDir =
-                  [gamesDir
-                      stringByAppendingPathComponent:@"Super R-R"];
+                  NSString *rrGameDir =
+                      [rrGames
+                          stringByAppendingPathComponent:@"Super R-R"];
 
-              NSString *dataPath =
-                  [gameDir
-                      stringByAppendingPathComponent:@"data.win"];
+                  NSString *rrData =
+                      [rrGameDir
+                          stringByAppendingPathComponent:@"data.win"];
 
-              NSString *bundled =
-                  [[[NSBundle mainBundle] resourcePath]
-                      stringByAppendingPathComponent:@"BundledGame"];
-
-              [fm createDirectoryAtPath:gamesDir
-                   withIntermediateDirectories:YES
-                                    attributes:nil
-                                         error:nil];
-
-              if (![fm fileExistsAtPath:dataPath]) {
-
-                  if ([fm fileExistsAtPath:gameDir]) {
-                      [fm removeItemAtPath:gameDir
-                                    error:nil];
-                  }
-
-                  NSError *copyError = nil;
-
-                  if (![fm copyItemAtPath:bundled
-                                   toPath:gameDir
-                                    error:&copyError]) {
+                  if ([[NSFileManager defaultManager]
+                          fileExistsAtPath:rrData]) {
 
                       NSLog(
-                          @"Super R-R direct install failed: %@",
-                          copyError
+                          @"Super R-R v11.8: SAFE direct launch."
                       );
+
+                      [self startGameWithPath:rrGameDir];
 
                   } else {
 
                       NSLog(
-                          @"Super R-R direct install OK."
+                          @"Super R-R v11.8: data.win missing."
                       );
                   }
               }
+          '''
 
-              [self.window makeKeyAndVisible];
+          method = method.replace(
+              needle,
+              direct,
+              1
+          )
 
-              if ([fm fileExistsAtPath:dataPath]) {
-
-                  NSLog(
-                      @"Super R-R: launching directly."
-                  );
-
-                  [self startGameWithPath:gameDir];
-
-              } else {
-
-                  NSLog(
-                      @"Super R-R: data.win missing after install."
-                  );
-              }
-          }'''
-
-          s = s[:start] + replacement + s[end:]
+          s = \
+              s[:start] \
+              + method \
+              + s[end:]
 
           p.write_text(
               s,
@@ -518,205 +650,265 @@ jobs:
           )
 
           print(
-              "Replaced applicationDidFinishLaunching "
-              "with direct Super R-R startup."
+              "Safe direct launch inserted."
           )
           PY
 
-          echo "===== DIRECT START CHECK ====="
+          echo "===== SAFE DIRECT CHECK ====="
 
           grep -n \
-            "Super R-R: launching directly" \
+            "SAFE direct launch" \
             "$MAIN"
 
           grep -n \
-            "applicationDidFinishLaunching" \
+            "gameListVC =" \
             "$MAIN" \
-            | head -3
+            | head -5
 
-      - name: Fix iOS renderer compatibility - remove invalid hostFramebuffer access
+          grep -n \
+            "navController =" \
+            "$MAIN" \
+            | head -5
+
+      # ==========================================================
+      # NEW ICON
+      # NO MORE BUTTERSCOTCH CAKE
+      # ==========================================================
+
+      - name: Create Hotline Miami Super R-R icon
         shell: bash
         run: |
           set -euo pipefail
 
-          MAIN="$GITHUB_WORKSPACE/Butterscotch/src/ios/main.c"
+          python3 -m pip install \
+            --quiet \
+            --disable-pip-version-check \
+            pillow
 
-          test -f "$MAIN"
+          ASSETS="$GITHUB_WORKSPACE/Butterscotch/artifacts/ios/assets"
 
-          echo "===== FIX hostFramebuffer COMPILE ERROR ====="
-
-          echo "Before:"
-          grep -n "hostFramebuffer" "$MAIN" || true
-
-          python3 - "$MAIN" <<'PY'
-          from pathlib import Path
-          import sys
-
-          p = Path(sys.argv[1])
-
-          lines = p.read_text(
-              encoding="utf-8"
-          ).splitlines()
-
-          kept = []
-          removed = []
-
-          for line in lines:
-
-              if (
-                  "->hostFramebuffer" in line
-                  and "= framebuffer" in line
-              ):
-                  removed.append(line)
-
-                  kept.append(
-                      "    /* iOS v11.5: invalid "
-                      "hostFramebuffer assignment removed; "
-                      "current GRenderer has no such member. */"
-                  )
-
-              else:
-                  kept.append(line)
-
-          if not removed:
-              print(
-                  "No hostFramebuffer assignment found; "
-                  "nothing to remove."
-              )
-
-          else:
-              print("Removed invalid line(s):")
-
-              for line in removed:
-                  print(line)
-
-          p.write_text(
-              "\n".join(kept) + "\n",
-              encoding="utf-8"
-          )
-          PY
-
-          echo "After:"
-
-          if grep -n \
-            -- "->hostFramebuffer" \
-            "$MAIN"
-          then
-            echo "ERROR: invalid hostFramebuffer access still exists."
-            exit 1
-          fi
-
-          echo "hostFramebuffer compatibility fix applied."
-
-      - name: Backup known-good iOS source before extra tuning
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          cp \
-            "$GITHUB_WORKSPACE/Butterscotch/src/ios/main.c" \
-            "$RUNNER_TEMP/superrr-main-known-good.c"
-
-          echo "Backed up main.c before extra v11 tuning."
-
-      - name: Apply FINAL 60 FPS performance tuning
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          cd "$GITHUB_WORKSPACE"
+          export ASSETS
 
           python3 <<'PY'
           from pathlib import Path
+          from PIL import Image, ImageDraw, ImageFont
+          import os
 
-          main = Path(
-              "Butterscotch/src/ios/main.c"
+          assets = Path(
+              os.environ["ASSETS"]
           )
 
-          if not main.exists():
-              raise SystemExit(
-                  "ERROR: Butterscotch/src/ios/main.c missing"
-              )
+          master_size = 1024
 
-          s = main.read_text(
-              encoding="utf-8"
+          img = Image.new(
+              "RGB",
+              (master_size, master_size),
+              (7, 7, 14)
           )
 
-          if "targetScale *= 0.72f;" in s:
+          draw = ImageDraw.Draw(img)
 
-              s = s.replace(
-                  "targetScale *= 0.72f;",
-                  "targetScale *= 0.60f;",
-                  1
+          font_candidates = [
+              Path(
+                  "/System/Library/Fonts/"
+                  "Supplemental/Arial Bold.ttf"
+              ),
+              Path(
+                  "/System/Library/Fonts/"
+                  "Supplemental/Arial Black.ttf"
+              ),
+          ]
+
+          font_path = None
+
+          for candidate in font_candidates:
+              if candidate.exists():
+                  font_path = candidate
+                  break
+
+          if font_path is None:
+
+              all_fonts = list(
+                  Path(
+                      "/System/Library/Fonts"
+                  ).rglob("*.ttf")
               )
 
-              print(
-                  "Framebuffer: 72% -> 60%."
+              if all_fonts:
+                  font_path = all_fonts[0]
+
+          def font(size):
+
+              if font_path:
+                  return ImageFont.truetype(
+                      str(font_path),
+                      size
+                  )
+
+              return ImageFont.load_default()
+
+          # Neon glow-like background strips
+          for y in range(
+              0,
+              master_size,
+              32
+          ):
+
+              alpha_level = (
+                  16 if
+                  (y // 32) % 2 == 0
+                  else 7
               )
 
-          elif "targetScale *= 0.60f;" in s:
-
-              print(
-                  "Framebuffer already 60%."
+              draw.rectangle(
+                  (
+                      0,
+                      y,
+                      master_size,
+                      y + 2
+                  ),
+                  fill=(
+                      alpha_level,
+                      4,
+                      alpha_level + 15
+                  )
               )
 
-          else:
+          lines = [
+              (
+                  "HOTLINE",
+                  190,
+                  (255, 45, 88),
+                  260
+              ),
+              (
+                  "MIAMI",
+                  230,
+                  (26, 224, 255),
+                  465
+              ),
+              (
+                  "SUPER R-R",
+                  130,
+                  (88, 255, 136),
+                  715
+              ),
+          ]
 
-              print(
-                  "Framebuffer marker not found; "
-                  "leaving source unchanged."
+          for text, size, color, y in lines:
+
+              f = font(size)
+
+              box = draw.textbbox(
+                  (0, 0),
+                  text,
+                  font=f,
+                  stroke_width=4
               )
 
-          main.write_text(
-              s,
-              encoding="utf-8"
+              w = box[2] - box[0]
+
+              x = (
+                  master_size - w
+              ) // 2
+
+              # shadow
+              draw.text(
+                  (
+                      x + 12,
+                      y + 14
+                  ),
+                  text,
+                  font=f,
+                  fill=(30, 0, 30),
+                  stroke_width=8,
+                  stroke_fill=(0, 0, 0)
+              )
+
+              draw.text(
+                  (x, y),
+                  text,
+                  font=f,
+                  fill=color,
+                  stroke_width=5,
+                  stroke_fill=(20, 5, 24)
+              )
+
+          master = \
+              assets / "SuperRR-MasterIcon.png"
+
+          img.save(
+              master,
+              "PNG"
+          )
+
+          sizes = {
+              "Icon.png": 57,
+              "Icon@2x.png": 114,
+
+              "Icon-Small.png": 29,
+              "Icon-Small@2x.png": 58,
+              "Icon-Small@3x.png": 87,
+
+              "Icon-20.png": 20,
+              "Icon-20@2x.png": 40,
+              "Icon-20@3x.png": 60,
+
+              "Icon-40.png": 40,
+              "Icon-40@2x.png": 80,
+              "Icon-40@3x.png": 120,
+
+              "Icon-60@2x.png": 120,
+              "Icon-60@3x.png": 180,
+
+              "Icon-72.png": 72,
+              "Icon-72@2x.png": 144,
+
+              "Icon-76.png": 76,
+              "Icon-76@2x.png": 152,
+
+              "Icon-83.5@2x.png": 167,
+          }
+
+          for name, size in sizes.items():
+
+              out = img.resize(
+                  (size, size),
+                  Image.Resampling.LANCZOS
+              )
+
+              out.save(
+                  assets / name,
+                  "PNG"
+              )
+
+          img.resize(
+              (512, 512),
+              Image.Resampling.LANCZOS
+          ).save(
+              assets / "iTunesArtwork",
+              "PNG"
+          )
+
+          img.resize(
+              (1024, 1024),
+              Image.Resampling.LANCZOS
+          ).save(
+              assets / "iTunesArtwork@2x",
+              "PNG"
+          )
+
+          print(
+              "Super R-R icon generated."
           )
           PY
 
-      - name: Inspect controls and FPS patches
-        shell: bash
-        run: |
-          set -euo pipefail
+          file "$ASSETS/Icon-60@3x.png"
+          file "$ASSETS/iTunesArtwork"
 
-          MAIN="$GITHUB_WORKSPACE/Butterscotch/src/ios/main.c"
-
-          test -f "$MAIN"
-
-          echo "===== CONTROL PATCH INSPECTION ====="
-
-          for PATTERN in \
-            "key:'R'" \
-            'label:@"LOOK"' \
-            'label:@"LOCK"' \
-            'label:@"II"' \
-            "bsDisplayedFPS" \
-            "BSLookPad" \
-            "Super R-R installed"
-
-          do
-
-            echo
-            echo ">>> $PATTERN"
-
-            grep -nF \
-              "$PATTERN" \
-              "$MAIN" \
-              | head -5 \
-              || true
-
-          done
-
-          echo
-          echo "===== BROADER CONTROL SEARCH ====="
-
-          grep -niE \
-            'LOOK|LOCK|pause|fps|restart|touch|joystick|gamepad' \
-            "$MAIN" \
-            | head -120 \
-            || true
-
-          echo
-          echo "Verification will NOT block the IPA build."
+      # ==========================================================
+      # A14 COMPILER TUNING
+      # ==========================================================
 
       - name: Detect A14 compiler tuning
         shell: bash
@@ -725,7 +917,9 @@ jobs:
 
           test -n "${IOS_CC:-}"
 
-          cat > "$RUNNER_TEMP/a14-test.c" <<'EOF'
+          cat \
+            > "$RUNNER_TEMP/a14-test.c" \
+            <<'EOF'
           int main(void) { return 0; }
           EOF
 
@@ -750,21 +944,29 @@ jobs:
 
           fi
 
-          echo "CPU_FLAGS=$CPU_FLAGS" >> "$GITHUB_ENV"
+          echo \
+            "CPU_FLAGS=$CPU_FLAGS" \
+            >> "$GITHUB_ENV"
+
+      # ==========================================================
+      # BUILD
+      # ==========================================================
 
       - name: Clean previous build
         shell: bash
         run: |
+          set -euo pipefail
+
           cd "$GITHUB_WORKSPACE/Butterscotch"
 
           make distclean || true
 
           rm -rf build
 
-      - name: Build Super R-R iOS IPA with automatic fallback
+      - name: Build Super R-R v11.8 IPA
         shell: bash
         run: |
-          set +e
+          set -euo pipefail
           set -o pipefail
 
           cd "$GITHUB_WORKSPACE/Butterscotch"
@@ -772,200 +974,68 @@ jobs:
           HASH="$(git rev-parse --short HEAD)"
           DATE="$(git show -s --format=%cs HEAD)"
 
-          LOG1="$GITHUB_WORKSPACE/super-rr-v11.7-build-primary.log"
-          LOG2="$GITHUB_WORKSPACE/super-rr-v11.7-build-fallback.log"
+          LOG="$GITHUB_WORKSPACE/super-rr-v11.8-build.log"
 
-          build_once() {
+          make \
+            -j4 \
+            OS=iOS \
+            CC="$IOS_CC" \
+            CFLAGS="-O3 -DNDEBUG -flto=thin -fomit-frame-pointer -fno-math-errno -ffp-contract=fast ${CPU_FLAGS:-}" \
+            LDFLAGS="-flto=thin -Wl,-dead_strip" \
+            DISABLE_WAD14=1 \
+            DISABLE_WAD17=1 \
+            DISABLE_VM_GML_PROFILER=1 \
+            DISABLE_VM_OPCODE_PROFILER=1 \
+            DISABLE_VM_STUB_LOGS=1 \
+            DISABLE_VM_TRACING=1 \
+            BUTTERSCOTCH_COMMIT_HASH="$HASH" \
+            BUTTERSCOTCH_COMMIT_DATE="$DATE" \
+            2>&1 | tee "$LOG"
 
-            LOG="$1"
+      # ==========================================================
+      # VERIFY
+      # ==========================================================
 
-            make \
-              -j4 \
-              OS=iOS \
-              CC="$IOS_CC" \
-              CFLAGS="-O3 -DNDEBUG -flto=thin -fomit-frame-pointer -fno-math-errno -ffp-contract=fast ${CPU_FLAGS:-}" \
-              LDFLAGS="-flto=thin -Wl,-dead_strip" \
-              DISABLE_WAD14=1 \
-              DISABLE_WAD17=1 \
-              DISABLE_VM_GML_PROFILER=1 \
-              DISABLE_VM_OPCODE_PROFILER=1 \
-              DISABLE_VM_STUB_LOGS=1 \
-              DISABLE_VM_TRACING=1 \
-              BUTTERSCOTCH_COMMIT_HASH="$HASH" \
-              BUTTERSCOTCH_COMMIT_DATE="$DATE" \
-              2>&1 | tee "$LOG"
-
-            return ${PIPESTATUS[0]}
-          }
-
-          echo "===== PRIMARY BUILD: SAFE 60% TUNING ====="
-
-          build_once "$LOG1"
-
-          STATUS=$?
-
-          if [ "$STATUS" -ne 0 ]; then
-
-            echo
-            echo "===== PRIMARY BUILD FAILED ====="
-
-            echo "First compiler errors:"
-
-            grep -nE \
-              '(^|[[:space:]])(fatal )?error:' \
-              "$LOG1" \
-              | head -40 \
-              || true
-
-            echo
-            echo "===== ERROR CONTEXT ====="
-
-            python3 - "$LOG1" <<'PY'
-          from pathlib import Path
-          import re
-          import sys
-
-          p = Path(sys.argv[1])
-
-          lines = p.read_text(
-              errors="replace"
-          ).splitlines()
-
-          hits = [
-              i
-              for i, line in enumerate(lines)
-              if re.search(
-                  r'(^|\s)(fatal )?error:',
-                  line
-              )
-          ]
-
-          if not hits:
-
-              print(
-                  "No compiler error line detected; "
-                  "see full log artifact."
-              )
-
-          else:
-
-              i = hits[0]
-
-              for j in range(
-                  max(0, i - 8),
-                  min(len(lines), i + 14)
-              ):
-                  print(
-                      f"{j + 1}: {lines[j]}"
-                  )
-          PY
-
-            echo
-            echo "===== FALLBACK ====="
-
-            echo "Restoring main.c from immediately after the recovered known-good patches."
-
-            cp \
-              "$RUNNER_TEMP/superrr-main-known-good.c" \
-              "$GITHUB_WORKSPACE/Butterscotch/src/ios/main.c"
-
-            make distclean >/dev/null 2>&1 || true
-
-            rm -rf build
-
-            build_once "$LOG2"
-
-            STATUS2=$?
-
-            if [ "$STATUS2" -ne 0 ]; then
-
-              echo
-              echo "===== FALLBACK BUILD ALSO FAILED ====="
-
-              grep -nE \
-                '(^|[[:space:]])(fatal )?error:' \
-                "$LOG2" \
-                | head -60 \
-                || true
-
-              echo
-              echo "===== FALLBACK FIRST ERROR CONTEXT ====="
-
-              python3 - "$LOG2" <<'PY'
-          from pathlib import Path
-          import re
-          import sys
-
-          p = Path(sys.argv[1])
-
-          lines = p.read_text(
-              errors="replace"
-          ).splitlines()
-
-          hits = [
-              i
-              for i, line in enumerate(lines)
-              if re.search(
-                  r'(^|\s)(fatal )?error:',
-                  line
-              )
-          ]
-
-          if not hits:
-
-              print(
-                  "No compiler error line detected; "
-                  "inspect the uploaded log."
-              )
-
-          else:
-
-              i = hits[0]
-
-              for j in range(
-                  max(0, i - 10),
-                  min(len(lines), i + 16)
-              ):
-                  print(
-                      f"{j + 1}: {lines[j]}"
-                  )
-          PY
-
-              exit "$STATUS2"
-
-            fi
-
-            echo "FALLBACK BUILD SUCCEEDED."
-
-          else
-
-            echo "PRIMARY BUILD SUCCEEDED."
-
-          fi
-
-          exit 0
-
-      - name: Verify IPA
+      - name: Verify v11.8 IPA
         shell: bash
         run: |
           set -euo pipefail
 
           IPA="$GITHUB_WORKSPACE/Butterscotch/build/butterscotch.ipa"
+
           BIN="$GITHUB_WORKSPACE/Butterscotch/build/butterscotch"
 
           test -f "$IPA"
           test -f "$BIN"
 
+          echo "Binary:"
           file "$BIN"
 
+          echo
+          echo "Architecture:"
           lipo -info "$BIN" || true
 
+          echo
+          echo "IPA:"
           ls -lh "$IPA"
 
+          echo
+          echo "Game data:"
           unzip -l "$IPA" \
-            | grep -i "BundledGame/data.win"
+            | grep \
+              "BundledGame/data.win"
 
-      - name: Prepare Super R-R IPA
+          echo
+          echo "New icon:"
+          unzip -l "$IPA" \
+            | grep \
+              "Icon-60@3x.png"
+
+      # ==========================================================
+      # OUTPUT
+      # ==========================================================
+
+      - name: Prepare Super R-R v11.8
         shell: bash
         run: |
           set -euo pipefail
@@ -978,32 +1048,47 @@ jobs:
 
           cp \
             "$GITHUB_WORKSPACE/Butterscotch/build/butterscotch.ipa" \
-            "$OUT/Super-R-R-iOS-v11.7-DIRECT-LANDSCAPE.ipa"
+            "$OUT/Super-R-R-iOS-v11.8-CRASH-FIX-DIRECT.ipa"
 
-          cat > "$OUT/README.txt" <<'EOF'
-          SUPER R-R iOS v11.7
-          =================
+          cat \
+            > "$OUT/README.txt" \
+            <<'EOF'
+          SUPER R-R iOS v11.8
+          ==================
 
-          Target: iPhone 12 / ARM64 / 60 FPS target.
-          Modern GL.
-          60% internal framebuffer.
-          O3 + Thin LTO.
-          Direct game launch.
-          Landscape mode.
-          Existing touch controls preserved.
-          Pause, FPS display and right LOOK preserved.
+          CRASH FIX BUILD
+
+          - Butterscotch iOS base pinned to the known-good
+            revision used by successful v11.5.
+
+          - Original applicationDidFinishLaunching is preserved.
+
+          - Direct game start happens only AFTER normal UIKit,
+            navigation controller and window initialization.
+
+          - Super R-R is automatically installed from BundledGame.
+
+          - New HOTLINE MIAMI SUPER R-R icon.
+
+          - No Butterscotch cake icon.
+
+          - ARM64 / iPhone 12 tuning.
+
+          - 60 FPS target.
+
+          - Existing touch controls preserved.
 
           IPA is unsigned.
           EOF
 
           ls -lh "$OUT"
 
-      - name: Upload Super R-R IPA
+      - name: Upload Super R-R v11.8 IPA
         uses: actions/upload-artifact@v4
         with:
-          name: Super-R-R-iOS-v11.7-DIRECT-LANDSCAPE-IPA
+          name: Super-R-R-iOS-v11.8-CRASH-FIX-IPA
           path: |
-            output/Super-R-R-iOS-v11.7-DIRECT-LANDSCAPE.ipa
+            output/Super-R-R-iOS-v11.8-CRASH-FIX-DIRECT.ipa
             output/README.txt
           if-no-files-found: error
           retention-days: 7
@@ -1013,14 +1098,12 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: Super-R-R-v11.7-FAILED
+          name: Super-R-R-v11.8-FAILED
           path: |
-            super-rr-v11.7-build-primary.log
-            super-rr-v11.7-build-fallback.log
+            super-rr-v11.8-build.log
             Butterscotch/src/ios/main.c
             Butterscotch/src/vm_builtins.c
             Butterscotch/src/loop.c
-            Butterscotch/src/math_compat.h
-            Butterscotch/compat/config.mk
+            Butterscotch/artifacts/ios/assets/Info.plist
           if-no-files-found: ignore
           retention-days: 7
