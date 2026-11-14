@@ -1,0 +1,110 @@
+
+name: Super RR Fix 12 - iOS Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 60
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore successful v11.7 build
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git show \
+            5f5033393f3a7b2b7838e8688f1294efa99c1395:.github/workflows/redux_ios_build.yml \
+            > "$RUNNER_TEMP/working.yml"
+
+          python3 -m pip install --quiet PyYAML
+
+          cat > "$RUNNER_TEMP/rebuild.py" <<'PY'
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+          import yaml
+
+          root = Path(os.environ["GITHUB_WORKSPACE"])
+          source = Path(os.environ["RUNNER_TEMP"]) / "working.yml"
+
+          config = yaml.safe_load(source.read_text())
+          steps = config["jobs"]["ios"]["steps"]
+
+          env = dict(os.environ)
+          envfile = Path(env["GITHUB_ENV"])
+
+          def reload_env():
+              if not envfile.exists():
+                  return
+
+              for line in envfile.read_text().splitlines():
+                  if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", line):
+                      key, value = line.split("=", 1)
+                      env[key] = value
+
+          for index, step in enumerate(steps):
+              name = step.get("name", "Unnamed")
+
+              if "run" not in step:
+                  continue
+
+              print(f"===== {name} =====", flush=True)
+
+              script = root / f"build_step_{index}.sh"
+              script.write_text(step["run"])
+
+              step_env = dict(env)
+              step_env.update(step.get("env", {}))
+
+              subprocess.run(
+                  ["bash", "-eo", "pipefail", str(script)],
+                  cwd=root,
+                  env=step_env,
+                  check=True,
+              )
+
+              reload_env()
+
+          PY
+
+          python3 "$RUNNER_TEMP/rebuild.py"
+
+      - name: Verify ARM64 IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          IPA="Butterscotch/build/butterscotch.ipa"
+
+          test -s "$IPA"
+
+          unzip -t "$IPA" > /dev/null
+
+          unzip -l "$IPA" |
+            grep "BundledGame/data.win"
+
+          echo "iOS IPA successfully compiled."
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Super-RR-iOS-Baseline
+          path: Butterscotch/build/butterscotch.ipa
+          if-no-files-found: error
+          retention-days: 7
