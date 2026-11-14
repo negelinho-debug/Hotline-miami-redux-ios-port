@@ -1,5 +1,5 @@
 
-name: Super RR Fix 12 - iOS Build
+name: Super RR Fix 12 - iOS Compiler Repair
 
 on:
   workflow_dispatch:
@@ -13,7 +13,6 @@ jobs:
     name: Build Super RR for iPhone
     runs-on: macos-15
     timeout-minutes: 60
-
     env:
       GH_TOKEN: ${{ github.token }}
 
@@ -23,7 +22,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Restore the last successfully built workflow
+      - name: Recover v11.7 and repair duplicated function
         shell: bash
         run: |
           set -euo pipefail
@@ -31,7 +30,6 @@ jobs:
           git show \
             5f5033393f3a7b2b7838e8688f1294efa99c1395:.github/workflows/redux_ios_build.yml \
             > "$RUNNER_TEMP/working-v11.7.yml"
-
           test -s "$RUNNER_TEMP/working-v11.7.yml"
 
           python3 -m venv "$RUNNER_TEMP/rr-venv"
@@ -42,76 +40,107 @@ jobs:
           import re
           import subprocess
           from pathlib import Path
-
           import yaml
 
-          workspace = Path(os.environ["GITHUB_WORKSPACE"])
+          root = Path(os.environ["GITHUB_WORKSPACE"])
           source = Path(os.environ["RUNNER_TEMP"]) / "working-v11.7.yml"
-          workflow = yaml.safe_load(source.read_text(encoding="utf-8"))
-          steps = workflow["jobs"]["ios"]["steps"]
-
+          config = yaml.safe_load(source.read_text(encoding="utf-8"))
+          steps = config["jobs"]["ios"]["steps"]
           env = dict(os.environ)
-          env_file = Path(env["GITHUB_ENV"])
+          envfile = Path(env["GITHUB_ENV"])
 
-          def reload_environment():
-              if not env_file.exists():
+          def reload_env():
+              if not envfile.is_file():
                   return
-              for line in env_file.read_text(encoding="utf-8").splitlines():
+              for line in envfile.read_text(encoding="utf-8").splitlines():
                   if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", line):
                       key, value = line.split("=", 1)
                       env[key] = value
 
+          def remove_duplicate_ortho():
+              p = root / "Butterscotch/src/vm_builtins.c"
+              s = p.read_text(encoding="utf-8")
+              pattern = r"\bstatic\s+RValue\s+builtin_d3d_set_projection_ortho\s*\("
+              hits = list(re.finditer(pattern, s))
+              print(f"Projection function definitions: {len(hits)}", flush=True)
+
+              if len(hits) == 1:
+                  return
+              if len(hits) != 2:
+                  raise RuntimeError("Unexpected projection function count: " + str(len(hits)))
+
+              # Keep the native upstream function; remove only the later
+              # duplicate added by the old Super R-R rendering patch.
+              start = hits[1].start()
+              opening = s.find("{", hits[1].end())
+              if opening < 0 or opening - start > 300:
+                  raise RuntimeError("Cannot locate duplicate function body")
+
+              depth = 0
+              end = None
+              for i in range(opening, len(s)):
+                  if s[i] == "{":
+                      depth += 1
+                  elif s[i] == "}":
+                      depth -= 1
+                      if depth == 0:
+                          end = i + 1
+                          break
+              if end is None:
+                  raise RuntimeError("Unclosed duplicate function")
+
+              patched = s[:start] + "\n/* Old duplicate removed by Fix 12. */\n" + s[end:]
+              if len(list(re.finditer(pattern, patched))) != 1:
+                  raise RuntimeError("Duplicate cleanup validation failed")
+              p.write_text(patched, encoding="utf-8")
+              print("Removed legacy duplicate; retained upstream implementation.", flush=True)
+
           for index, step in enumerate(steps):
+              name = step.get("name", f"Step {index}")
               if "run" not in step:
                   continue
 
-              name = step.get("name", f"Step {index}")
-              print(f"===== {name} =====", flush=True)
-              script = workspace / f"v11_7_step_{index}.sh"
-              script.write_text(step["run"], encoding="utf-8")
+              if name == "Build Super R-R iOS IPA with automatic fallback":
+                  remove_duplicate_ortho()
 
-              # GH_TOKEN is provided by this workflow.
+              print(f"===== {name} =====", flush=True)
+              script = root / f"v11_7_step_{index}.sh"
+              script.write_text(step["run"], encoding="utf-8")
               subprocess.run(
                   ["bash", "-eo", "pipefail", str(script)],
-                  cwd=workspace,
+                  cwd=root,
                   env=env,
                   check=True,
               )
-              reload_environment()
-
-          print("Completed all original v11.7 build steps.", flush=True)
+              reload_env()
           PY
 
           "$RUNNER_TEMP/rr-venv/bin/python" "$RUNNER_TEMP/rebuild.py"
 
-      - name: Verify iOS ARM64 IPA
+      - name: Verify ARM64 IPA
         shell: bash
         run: |
           set -euo pipefail
           IPA="Butterscotch/build/butterscotch.ipa"
           BIN="Butterscotch/build/butterscotch"
-
           test -s "$IPA"
           test -s "$BIN"
-          file "$BIN"
           lipo -archs "$BIN" | grep -qw arm64
-          unzip -t "$IPA" > /dev/null
+          unzip -t "$IPA" >/dev/null
           unzip -l "$IPA" | grep 'BundledGame/data.win'
-          echo "IPA archive and ARM64 binary verified."
 
-      - name: Prepare output IPA
+      - name: Prepare IPA
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p output
           cp Butterscotch/build/butterscotch.ipa \
-            output/Super-RR-iOS-v11.7-Baseline.ipa
-          ls -lh output/
+            output/Super-RR-iOS-Compiler-Fix.ipa
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: Super-RR-iOS-Baseline
-          path: output/Super-RR-iOS-v11.7-Baseline.ipa
+          name: Super-RR-iOS-Compiler-Fix
+          path: output/Super-RR-iOS-Compiler-Fix.ipa
           if-no-files-found: error
           retention-days: 7
