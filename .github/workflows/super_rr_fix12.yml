@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   build:
+    name: Build Super RR iOS
     runs-on: macos-15
     timeout-minutes: 60
 
@@ -27,26 +28,46 @@ jobs:
         run: |
           set -euo pipefail
 
+          echo "Restoring known-good v11.7 workflow"
+
           git show \
             5f5033393f3a7b2b7838e8688f1294efa99c1395:.github/workflows/redux_ios_build.yml \
             > "$RUNNER_TEMP/working.yml"
 
-          python3 -m pip install --quiet PyYAML
+          test -s "$RUNNER_TEMP/working.yml"
+
+          echo "Creating Python virtual environment"
+
+          python3 -m venv "$RUNNER_TEMP/rr-venv"
+
+          "$RUNNER_TEMP/rr-venv/bin/python" \
+            -m pip install --quiet PyYAML
+
+          echo "Creating build script"
 
           cat > "$RUNNER_TEMP/rebuild.py" <<'PY'
           import os
           import re
           import subprocess
           from pathlib import Path
+
           import yaml
 
           root = Path(os.environ["GITHUB_WORKSPACE"])
-          source = Path(os.environ["RUNNER_TEMP"]) / "working.yml"
 
-          config = yaml.safe_load(source.read_text())
+          source = (
+              Path(os.environ["RUNNER_TEMP"])
+              / "working.yml"
+          )
+
+          config = yaml.safe_load(
+              source.read_text(encoding="utf-8")
+          )
+
           steps = config["jobs"]["ios"]["steps"]
 
           env = dict(os.environ)
+
           envfile = Path(env["GITHUB_ENV"])
 
           def reload_env():
@@ -54,26 +75,59 @@ jobs:
                   return
 
               for line in envfile.read_text().splitlines():
-                  if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", line):
+                  if re.match(
+                      r"^[A-Za-z_][A-Za-z0-9_]*=",
+                      line
+                  ):
                       key, value = line.split("=", 1)
                       env[key] = value
 
           for index, step in enumerate(steps):
-              name = step.get("name", "Unnamed")
+              name = step.get(
+                  "name",
+                  "Unnamed step"
+              )
 
               if "run" not in step:
                   continue
 
-              print(f"===== {name} =====", flush=True)
+              print(
+                  f"\n===== {name} =====",
+                  flush=True
+              )
 
-              script = root / f"build_step_{index}.sh"
-              script.write_text(step["run"])
+              script = (
+                  root
+                  / f"build_step_{index}.sh"
+              )
+
+              script.write_text(
+                  step["run"],
+                  encoding="utf-8"
+              )
 
               step_env = dict(env)
-              step_env.update(step.get("env", {}))
+
+              for key, value in step.get(
+                  "env", {}
+              ).items():
+
+                  if (
+                      isinstance(value, str)
+                      and "${{" in value
+                  ):
+                      continue
+
+                  step_env[key] = str(value)
 
               subprocess.run(
-                  ["bash", "-eo", "pipefail", str(script)],
+                  [
+                      "bash",
+                      "-e",
+                      "-o",
+                      "pipefail",
+                      str(script),
+                  ],
                   cwd=root,
                   env=step_env,
                   check=True,
@@ -81,9 +135,16 @@ jobs:
 
               reload_env()
 
+          print(
+              "\nAll build steps completed",
+              flush=True
+          )
           PY
 
-          python3 "$RUNNER_TEMP/rebuild.py"
+          echo "Running restored build"
+
+          "$RUNNER_TEMP/rr-venv/bin/python" \
+            "$RUNNER_TEMP/rebuild.py"
 
       - name: Verify ARM64 IPA
         shell: bash
@@ -91,20 +152,49 @@ jobs:
           set -euo pipefail
 
           IPA="Butterscotch/build/butterscotch.ipa"
+          BIN="Butterscotch/build/butterscotch"
 
           test -s "$IPA"
+          test -s "$BIN"
 
+          echo "Checking ARM64 executable"
+          file "$BIN"
+
+          lipo -info "$BIN"
+
+          echo "Checking IPA archive"
           unzip -t "$IPA" > /dev/null
 
+          echo "Checking original game data"
           unzip -l "$IPA" |
             grep "BundledGame/data.win"
 
-          echo "iOS IPA successfully compiled."
+          echo "IPA verification passed"
+
+      - name: Prepare IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p output
+
+          cp \
+            Butterscotch/build/butterscotch.ipa \
+            output/Super-RR-iOS-Baseline.ipa
+
+          ls -lh output/
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: Super-RR-iOS-Baseline
-          path: Butterscotch/build/butterscotch.ipa
+          path: output/Super-RR-iOS-Baseline.ipa
           if-no-files-found: error
           retention-days: 7
+
+      - name: Build failure notice
+        if: failure()
+        shell: bash
+        run: |
+          echo "Build failed."
+          echo "Check the failed step logs."
