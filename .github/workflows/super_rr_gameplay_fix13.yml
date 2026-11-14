@@ -1,0 +1,343 @@
+
+name: Super RR Gameplay Fix 13 - Trauma Enemies FPS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  ios:
+    name: Build gameplay-fixed Super RR IPA
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout all historical build scripts
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run v11.7 with gameplay patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show 5f5033393f3a7b2b7838e8688f1294efa99c1395:.github/workflows/redux_ios_build.yml > "$RUNNER_TEMP/v11_7.yml"
+          test -s "$RUNNER_TEMP/v11_7.yml"
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/python" -m pip install --quiet PyYAML
+
+          cat > "$RUNNER_TEMP/patch_game.py" <<'PY'
+          #!/usr/bin/env python3
+          """Targeted GameMaker GEN8 data.win change: hospital entrance no longer blocks player.
+
+          Original Super-RR v1.0 only; asserts door identity + original file hash.
+          This does not itself ensure the game fires its level-completion event.
+          """
+          import hashlib
+          import os
+          import shutil
+          import struct
+          import sys
+          from pathlib import Path
+
+          EXPECTED_SHA = "bac1a7d5ab2edaa966ca275f97a83e5baeae5d1c22112be96c29d0fdb8eedc37"
+          OBJT_INDEX = 753
+          ROOM_INDEX = 126
+          EXPECTED_DOOR_INSTANCE_IDS = {114073, 114203}
+
+          def u32(raw, ofs):
+              return struct.unpack_from("<I", raw, ofs)[0]
+
+          def chunktable(raw):
+              assert raw[:4] == b"FORM", "Not a GameMaker FORM file"
+              off = 8
+              chunks = {}
+              while off + 8 <= len(raw):
+                  name = raw[off:off + 4].decode("ascii")
+                  size = u32(raw, off + 4)
+                  assert off + 8 + size <= len(raw), f"Invalid chunk {name}"
+                  chunks[name] = (off + 8, size)
+                  off += 8 + size
+              assert off == len(raw), "Game data boundary mismatch"
+              return chunks
+
+          def check_room_instances(raw, rooms_chunk):
+              room_base = rooms_chunk[0]
+              roomptr = u32(raw, room_base + 4 + ROOM_INDEX * 4)
+              instance_list_ptr = u32(raw, roomptr + 48)
+              count = u32(raw, instance_list_ptr)
+              found = set()
+              for n in range(count):
+                  inst = u32(raw, instance_list_ptr + 4 + n * 4)
+                  if u32(raw, inst + 8) == OBJT_INDEX:
+                      found.add(u32(raw, inst + 12))
+              assert found == EXPECTED_DOOR_INSTANCE_IDS, f"Unexpected Trauma doors: {found}"
+
+          def patch_game(source):
+              source = Path(source)
+              raw = bytearray(source.read_bytes())
+              original_sha = hashlib.sha256(raw).hexdigest()
+              if original_sha != EXPECTED_SHA:
+                  raise RuntimeError(f"Unknown data.win version: {original_sha}; refusing unsafe patch")
+              chunks = chunktable(raw)
+              objt = chunks["OBJT"][0]
+              assert u32(raw, objt) > OBJT_INDEX
+              room = chunks["ROOM"]
+              check_room_instances(raw, room)
+              objptr = u32(raw, objt + 4 + OBJT_INDEX * 4)
+              strptr = u32(raw, objptr)
+              assert bytes(raw[strptr:strptr+25]).split(b"\x00", 1)[0] == b"objHospitalEntranceDoors"
+              solid_offset = objptr + 12
+              assert u32(raw, solid_offset) == 1, "Hospital door does not have expected solid flag"
+              struct.pack_into("<I", raw, solid_offset, 0)
+              new_sha = hashlib.sha256(raw).hexdigest()
+              source.write_bytes(raw)
+              print(f"TRAUMA GAMEPLAY PATCH: objHospitalEntranceDoors solid 1 -> 0; index {OBJT_INDEX}")
+              print("Two door instances in rmHospitalEntrance verified; original scene and event scripts retained")
+              print("Data SHA before:", original_sha)
+              print("Data SHA after: ", new_sha)
+              return new_sha
+
+          if __name__ == "__main__":
+              if len(sys.argv) != 3:
+                  raise SystemExit("Usage: patch_game.py ORIGINAL_DATAWIN BUNDLED_DATAWIN")
+              src, bundle = map(Path, sys.argv[1:])
+              patched = patch_game(src)
+              assert bundle.parent.is_dir(), f"Missing BundledGame dir: {bundle.parent}"
+              shutil.copyfile(src, bundle)
+              assert hashlib.sha256(bundle.read_bytes()).hexdigest() == patched
+              print("Both original and bundled data.win now match")
+          PY
+
+          cat > "$RUNNER_TEMP/patch_runner.py" <<'PY'
+          #!/usr/bin/env python3
+          """Apply iOS-specific fixes to Butterscotch prior to the IPA build."""
+          import re
+          import sys
+          from pathlib import Path
+
+          ROOT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path.cwd()
+
+
+          def fix_duplicate():
+              p = ROOT / 'src/vm_builtins.c'
+              s = p.read_text(encoding='utf-8')
+              expression = r'\bstatic\s+RValue\s+builtin_d3d_set_projection_ortho\s*\('
+              hits = list(re.finditer(expression, s))
+              if len(hits) == 1:
+                  print('Compile fix: projection function already unique')
+                  return
+              assert len(hits) == 2, f'Unsafe projection function count: {len(hits)}'
+              start = hits[1].start()
+              opening = s.find('{', hits[1].end())
+              assert 0 <= opening - start <= 300, 'Unexpected C function signature'
+              depth = 0
+              end = None
+              for i in range(opening, len(s)):
+                  if s[i] == '{':
+                      depth += 1
+                  if s[i] == '}':
+                      depth -= 1
+                      if depth == 0:
+                          end = i + 1
+                          break
+              assert end is not None
+              s = s[:start] + '\n/* Duplicate removed: preserve upstream implementation. */\n' + s[end:]
+              assert len(re.findall(expression, s)) == 1
+              p.write_text(s, encoding='utf-8')
+              print('Compile fix: removed old duplicated projection function')
+
+
+          def tune_fps():
+              p = ROOT / 'src/ios/main.c'
+              s = p.read_text(encoding='utf-8')
+              if 'targetScale *= 0.60f;' in s:
+                  s = s.replace('targetScale *= 0.60f;', 'targetScale *= 0.52f;', 1)
+                  print('FPS: framebuffer scale 60% -> 52% (GPU workload reduced)')
+              elif 'targetScale *= 0.72f;' in s:
+                  s = s.replace('targetScale *= 0.72f;', 'targetScale *= 0.52f;', 1)
+                  print('FPS: framebuffer scale 72% -> 52% (GPU workload reduced)')
+              elif 'targetScale *= 0.52f;' in s:
+                  print('FPS: framebuffer already 52%')
+              else:
+                  print('FPS WARNING: framebuffer marker not found; no resolution tuning applied')
+              p.write_text(s, encoding='utf-8')
+
+
+          ANTI_CLIP = r'''
+                          /* Super R-R anti-wall tunneling, original rooms untouched.
+                           * Move enemies only if they enter an existing solid wall.
+                           * Skip teleports (moves > 96px) and existing overlaps.
+                           * A broad-phase bounds check avoids expensive per-pixel
+                           * overlap calls for distant walls. */
+                          if (runner->instancesByObject != NULL) {
+                              int32_t rrEnemyTypes[2] = {275, 262};
+                              Instance** rrWalls = runner->instancesByObject[309];
+                              for (int rrTyp = 0; rrTyp < 2; rrTyp++) {
+                                  Instance** rrEnemies = runner->instancesByObject[rrEnemyTypes[rrTyp]];
+                                  for (size_t rrI = 0; rrI < (size_t)arrlen(rrEnemies); rrI++) {
+                                      Instance* rrE = rrEnemies[rrI];
+                                      if (rrE == NULL || rrE->destroyed || !rrE->active)
+                                          continue;
+                                      const float rrSX = rrE->xprevious;
+                                      const float rrSY = rrE->yprevious;
+                                      const float rrEX = rrE->x;
+                                      const float rrEY = rrE->y;
+                                      const float rrDX = rrEX - rrSX;
+                                      const float rrDY = rrEY - rrSY;
+                                      const float rrMaxDist = fmaxf(fabsf(rrDX), fabsf(rrDY));
+                                      if (rrMaxDist < 0.01f || rrMaxDist > 96.0f)
+                                          continue;
+                                      InstanceBBox rrEEnd = Collision_computeBBox(runner, rrE);
+                                      if (!rrEEnd.valid)
+                                          continue;
+                                      const float rrSweptLeft = rrEEnd.left + fminf(0.0f, -rrDX);
+                                      const float rrSweptRight = rrEEnd.right + fmaxf(0.0f, -rrDX);
+                                      const float rrSweptTop = rrEEnd.top + fminf(0.0f, -rrDY);
+                                      const float rrSweptBottom = rrEEnd.bottom + fmaxf(0.0f, -rrDY);
+                                      const int rrSteps = (int)fminf(32.0f, fmaxf(1.0f, ceilf(rrMaxDist / 3.0f)));
+                                      float rrLimitT = 1.0f;
+                                      for (size_t rrJ = 0; rrJ < (size_t)arrlen(rrWalls); rrJ++) {
+                                          Instance* rrW = rrWalls[rrJ];
+                                          if (rrW == NULL || rrW->destroyed || !rrW->active || !rrW->solid)
+                                              continue;
+                                          InstanceBBox rrWB = Collision_computeBBox(runner, rrW);
+                                          if (!rrWB.valid || rrSweptLeft >= rrWB.right ||
+                                              rrSweptRight <= rrWB.left || rrSweptTop >= rrWB.bottom ||
+                                              rrSweptBottom <= rrWB.top)
+                                              continue;
+                                          rrE->x = rrSX;
+                                          rrE->y = rrSY;
+                                          InstanceBBox rrEBegin = Collision_computeBBox(runner, rrE);
+                                          if (rrEBegin.valid && Collision_instancesOverlapPrecise(
+                                                  runner, rrE, rrW, rrEBegin, rrWB)) {
+                                              rrE->x = rrEX;
+                                              rrE->y = rrEY;
+                                              continue; /* Existing overlap is not a new wall crossing. */
+                                          }
+                                          for (int rrS = 1; rrS <= rrSteps; rrS++) {
+                                              float rrT = (float)rrS / (float)rrSteps;
+                                              if (rrT > rrLimitT)
+                                                  break;
+                                              rrE->x = rrSX + rrDX * rrT;
+                                              rrE->y = rrSY + rrDY * rrT;
+                                              InstanceBBox rrEB = Collision_computeBBox(runner, rrE);
+                                              if (rrEB.valid && Collision_instancesOverlapPrecise(
+                                                      runner, rrE, rrW, rrEB, rrWB)) {
+                                                  rrLimitT = (float)(rrS - 1) / (float)rrSteps;
+                                                  break;
+                                              }
+                                          }
+                                          rrE->x = rrEX;
+                                          rrE->y = rrEY;
+                                      }
+                                      if (rrLimitT < 1.0f) {
+                                          rrE->x = rrSX + rrDX * rrLimitT;
+                                          rrE->y = rrSY + rrDY * rrLimitT;
+                                          rrE->spatialGridDirty = true;
+                                      }
+                                  }
+                              }
+                          }
+          '''
+
+
+          def fix_enemies():
+              p = ROOT / 'src/loop.c'
+              s = p.read_text(encoding='utf-8')
+              if '#include "collision.h"' not in s:
+                  assert '#include "loop.h"' in s, 'Unexpected loop.c includes'
+                  s = s.replace('#include "loop.h"', '#include "loop.h"\n#include "collision.h"\n#include <math.h>', 1)
+              assert s.count('                Runner_step(runner);') == 1, 'Unexpected game loop structure'
+              s = s.replace('                Runner_step(runner);', '                Runner_step(runner);\n' + ANTI_CLIP, 1)
+              p.write_text(s, encoding='utf-8')
+              print('Enemy wall fix: swept collision check inserted after Runner_step')
+
+
+          if __name__ == '__main__':
+              fix_duplicate()
+              tune_fps()
+              fix_enemies()
+          PY
+
+          cat > "$RUNNER_TEMP/rebuild.py" <<'PY'
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+          import yaml
+
+          workspace = Path(os.environ['GITHUB_WORKSPACE'])
+          tmp = Path(os.environ['RUNNER_TEMP'])
+          original = tmp / 'v11_7.yml'
+          steps = yaml.safe_load(original.read_text())['jobs']['ios']['steps']
+          env = dict(os.environ)
+
+          def update_env():
+              p = Path(env['GITHUB_ENV'])
+              if p.exists():
+                  for line in p.read_text().splitlines():
+                      if re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', line):
+                          key, value = line.split('=', 1)
+                          env[key] = value
+
+          def execute_py(path, *arguments):
+              subprocess.run([str(tmp / 'venv/bin/python'), str(tmp / path), *map(str,arguments)],
+                             cwd=workspace, env=env, check=True)
+
+          for number, step in enumerate(steps):
+              name = step.get('name', f'legacy-step-{number}')
+              if name == 'Build Super R-R iOS IPA with automatic fallback':
+                  print('===== GAMEPLAY/RUNNER PATCH: collision and GPU =====', flush=True)
+                  execute_py('patch_runner.py', workspace / 'Butterscotch')
+              if 'run' not in step:
+                  continue
+              print(f'===== ORIGINAL GAME BUILD: {name} =====', flush=True)
+              script = tmp / f'rr_orig_{number}.sh'
+              script.write_text(step['run'], encoding='utf-8')
+              subprocess.run(['bash','-eo','pipefail',str(script)],cwd=workspace,env=env,check=True)
+              update_env()
+              if name == 'Bundle complete Super Redux-Redux':
+                  print('===== TRAUMA GAME DATA PATCH =====', flush=True)
+                  execute_py('patch_game.py', env['DATAWIN'],
+                             workspace / 'Butterscotch/artifacts/ios/assets/BundledGame/data.win')
+
+          print('All Fix13 build steps completed')
+
+          PY
+
+          "$RUNNER_TEMP/venv/bin/python" "$RUNNER_TEMP/rebuild.py"
+
+      - name: Verify actual patched game data and ARM64 IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          IPA="$GITHUB_WORKSPACE/Butterscotch/build/butterscotch.ipa"
+          BIN="$GITHUB_WORKSPACE/Butterscotch/build/butterscotch"
+          test -s "$IPA"
+          test -s "$BIN"
+          lipo -archs "$BIN" | grep -qw arm64
+          unzip -t "$IPA" > /dev/null
+          unzip -l "$IPA" | grep 'BundledGame/data.win'
+          echo "Compiled iOS app with modified gameplay data."
+          echo "Hardware test of Trauma, enemy navigation and FPS is still required."
+
+      - name: Prepare gameplay IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          cp Butterscotch/build/butterscotch.ipa output/Super-RR-Gameplay-Fix13-TEST.ipa
+          ls -lh output/
+
+      - name: Upload gameplay IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Super-RR-Gameplay-Fix13-TEST
+          path: output/Super-RR-Gameplay-Fix13-TEST.ipa
+          if-no-files-found: error
+          retention-days: 7
